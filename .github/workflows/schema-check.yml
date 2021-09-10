@@ -1,9 +1,9 @@
 # Checks to find any diffs in schema
 name: Schema Check
 
-# Controls when the workflow will run
 on:
   workflow_dispatch:
+  pull_request:
 
 jobs:
   check:
