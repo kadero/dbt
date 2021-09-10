@@ -19,6 +19,7 @@ jobs:
         uses: actions/checkout@v2
         with:
           repository: dbt-labs/schemas.getdbt.com
+          ref: 'main'
 
       # Runs a single command using the runners shell
       - name: Run a one-line script
