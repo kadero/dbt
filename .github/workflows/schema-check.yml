@@ -56,5 +56,5 @@ jobs:
           ls
           echo =========
           git diff --exclude-regex-paths="\\['dbt_version'\\]\\['default'\\]" \
-          --exclude-regex-paths=\\['generated_at'\\]\\['default'\\] \
-          --exclude-regex-paths=\\['description'\\] \\['dbt_schema_version'\\]\\['default'\\]"
+          --exclude-regex-paths="\\['generated_at'\\]\\['default'\\]" \
+          --exclude-regex-paths="\\['description'\\] \\['dbt_schema_version'\\]\\['default'\\]"
