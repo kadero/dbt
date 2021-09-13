@@ -25,6 +25,7 @@ jobs:
         run: |
           git clone https://github.com/dbt-labs/schemas.getdbt.com.git          
           ls
+          pwd
           
       - name: Checkout dbt
         uses: actions/checkout@v2.3.4
@@ -38,7 +39,7 @@ jobs:
           pip install --upgrade pip
           pip install -r dev-requirements.txt -r editable-requirements.txt
           ls scripts
-          python scripts/collect-artifact-schema.py --path .
-          ls
+          python scripts/collect-artifact-schema.py --path schemas.getdbt.com
+          echo {{ env.RUNNER_TEMP }}
           
 
