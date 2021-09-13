@@ -40,6 +40,5 @@ jobs:
           pip install -r dev-requirements.txt -r editable-requirements.txt
           ls scripts
           python scripts/collect-artifact-schema.py --path schemas.getdbt.com
-          echo $env.RUNNER_TEMP
-          echo ${env.RUNNER_TEMP}
+          env
 
