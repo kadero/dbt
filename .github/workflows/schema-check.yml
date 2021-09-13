@@ -26,12 +26,10 @@ jobs:
                 
       - name: Clone schemas.getdbt.com
         run: |
-          git clone https://github.com/dbt-labs/schemas.getdbt.com.git          
+          git clone https://github.com/dbt-labs/schemas.getdbt.com.git 
+          git clone https://github.com/dbt-labs/dbt.git 
           ls
           pwd
-          
-      - name: Checkout dbt
-        uses: actions/checkout@v2.3.4
       
       - name: Run schema script
         run: |
