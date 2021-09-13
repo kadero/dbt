@@ -55,6 +55,5 @@ jobs:
           cd schemas.getdbt.com
           ls
           echo =========
-          git diff --exclude-regex-paths="\\['dbt_version'\\]\\['default'\\]" \
-          --exclude-regex-paths="\\['generated_at'\\]\\['default'\\]" \
-          --exclude-regex-paths="\\['description'\\] \\['dbt_schema_version'\\]\\['default'\\]"
+          git diff -I='*[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])T' \
+          -I='*[0-9]{1}.[0-9]{2}.[0-9]{1}(rc[0-9]|b[0-9]| )'
