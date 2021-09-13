@@ -6,7 +6,7 @@ on:
   pull_request:
 
 env:
-  LATEST_SCHEMA_PATH: ${GITHUB_WORKSPACE}/new_schemas
+  LATEST_SCHEMA_PATH: ${{github.workspace}}/new_schemas
 
 jobs:
   check:
@@ -40,7 +40,7 @@ jobs:
           
       - name: Compare schemas
         run: |
-          cd ${GITHUB_WORKSPACE}
+          cd ${{github.workspace}}
           cp -r new_schemas/dbt schemas.getdbt.com
           cd schemas.getdbt.com
           diff_results=$(git diff -I='*[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])T' \
@@ -49,7 +49,7 @@ jobs:
             echo $diff_results
             echo "Schema changes detected!"
             git diff -I='*[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])T' \
-          -I='*[0-9]{1}.[0-9]{2}.[0-9]{1}(rc[0-9]|b[0-9]| )' > ${GITHUB_WORKSPACE}/schema_schanges.txt
+          -I='*[0-9]{1}.[0-9]{2}.[0-9]{1}(rc[0-9]|b[0-9]| )' > ${{github.workspace}}/schema_schanges.txt
           else
             echo "No schema changes detected"
           fi
@@ -59,4 +59,4 @@ jobs:
         if: success()
         with:
           name: 'schema_schanges.txt'
-          path: '${GITHUB_WORKSPACE}/schema_schanges.txt'
+          path: '${{github.workspace}}/schema_schanges.txt'
