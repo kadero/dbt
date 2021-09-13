@@ -6,7 +6,7 @@ on:
   pull_request:
 
 env:
-  LATEST_SCHEMA_PATH: ${{env.RUNNER_WORKSPACE}}/schemas.getdbt.com
+  LATEST_SCHEMA_PATH: /home/runner/work/dbt/schemas.getdbt.com
 
 jobs:
   check:
