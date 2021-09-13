@@ -44,9 +44,17 @@ jobs:
           python scripts/collect-artifact-schema.py --path ${LATEST_SCHEMA_PATH}
           cd /home/runner/work/dbt/dbt
           ls
+          echo =========
           ls schemas.getdbt.com
+          echo =========
+          ls schemas.getdbt.com/dbt 
+          echo =========
           rm -rf schemas.getdbt.com/dbt 
           cp -r new_schemas/dbt schemas.getdbt.com
+          ls schemas.getdbt.com/dbt 
+          echo =========
           cd schemas.getdbt.com
+          ls
+          echo =========
           git diff
 
