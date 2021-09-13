@@ -48,6 +48,14 @@ jobs:
           if [[ $(echo diff_results) ]]; then
             echo $diff_results
             echo "Schema changes detected!"
+            git diff -I='*[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])T' \
+          -I='*[0-9]{1}.[0-9]{2}.[0-9]{1}(rc[0-9]|b[0-9]| )' > /home/runner/work/dbt/dbt/schema_schanges.txt
           else
             echo "No schema changes detected"
           fi
+
+      - name: Upload schema diff
+        uses: actions/upload-artifact@v2.2.4
+        if: success()
+        with:
+          path: '/home/runner/work/dbt/dbt/schema_schanges.txt'
