@@ -49,7 +49,6 @@ jobs:
           echo =========
           ls schemas.getdbt.com/dbt 
           echo =========
-          rm -rf schemas.getdbt.com/dbt 
           cp -r new_schemas/dbt schemas.getdbt.com
           ls schemas.getdbt.com/dbt 
           echo =========
