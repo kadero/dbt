@@ -11,10 +11,6 @@ jobs:
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - name: Checkout dbt repo
-        uses: actions/checkout@v2
-        
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
@@ -28,6 +24,7 @@ jobs:
       # Runs a single command using the runners shell
       - name: Run a one-line script
         run: |
+          git clone https://github.com/dbt-labs/dbt
           git clone https://github.com/dbt-labs/schemas.getdbt.com.git          
           ls
           cd dbt
