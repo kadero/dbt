@@ -21,19 +21,19 @@ jobs:
           ssh-private-key: |
                 ${{ secrets.SCHEMA_SSH_PRIVATE_KEY }}
                 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
+      - name: Clone schemas.getdbt.com
         run: |
-          git clone https://github.com/dbt-labs/dbt
           git clone https://github.com/dbt-labs/schemas.getdbt.com.git          
           ls
-          cd dbt
-          pip install -r dev-requirements.txt
           
+      - name: Checkout dbt
+        uses: actions/checkout@v2.3.4
+      
       - name: Run schema script
         run: |
-          cd dbt
+          pwd
           ls
+          pip install -r dev-requirements.txt
           ls scripts
           python scripts/collect-artifact-schema.py --path .
           ls
