@@ -6,7 +6,7 @@ on:
   pull_request:
 
 env:
-  LATEST_SCHEMA_PATH: /home/runner/work/dbt/new_schemas
+  LATEST_SCHEMA_PATH: /home/runner/work/dbt/dbt/new_schemas
 
 jobs:
   check:
@@ -42,7 +42,7 @@ jobs:
           pip install -r dev-requirements.txt -r editable-requirements.txt
           ls scripts
           python scripts/collect-artifact-schema.py --path ${LATEST_SCHEMA_PATH}
-          cd /home/runner/work/dbt
+          cd /home/runner/work/dbt/dbt
           ls
           ls schemas.getdbt.com
           rm -rf schemas.getdbt.com/dbt 
