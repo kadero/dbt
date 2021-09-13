@@ -50,11 +50,13 @@ jobs:
           ls schemas.getdbt.com/dbt 
           echo =========
           rm -rf schemas.getdbt.com/dbt 
+          git status
           cp -r new_schemas/dbt schemas.getdbt.com
           ls schemas.getdbt.com/dbt 
+          git status
           echo =========
           cd schemas.getdbt.com
           ls
           echo =========
-          git diff
+          git status
 
