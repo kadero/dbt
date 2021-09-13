@@ -32,7 +32,9 @@ jobs:
           
       - name: Run schema script
         run: |
-          python scripts/collect-artifact-schema.py .
+          ls
+          ls scripts
+          python scripts/collect-artifact-schema.py --path .
           ls
           
 
