@@ -32,6 +32,7 @@ jobs:
           
       - name: Run schema script
         run: |
+          cd dbt
           ls
           ls scripts
           python scripts/collect-artifact-schema.py --path .
