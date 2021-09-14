@@ -62,7 +62,8 @@ jobs:
             echo $diff_results
             echo "Schema changes detected!"
             git diff -I='*[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])T' \
-          -I='*[0-9]{1}.[0-9]{2}.[0-9]{1}(rc[0-9]|b[0-9]| )' > ${{ env.SCHEMA_DIFF_ARTIFACT }}
+              -I='*[0-9]{1}.[0-9]{2}.[0-9]{1}(rc[0-9]|b[0-9]| )' > ${{ env.SCHEMA_DIFF_ARTIFACT }}
+            exit 1
           else
             echo "No schema changes detected"
           fi
