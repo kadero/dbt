@@ -1,14 +1,25 @@
-# Checks to find any diffs in schema and fails if so
+# **what?**
+# Compares the schema of the dbt version of the given ref vs 
+# the latest official schema releases found in schemas.getdbt.com.
+# If there are differences, the workflow will fail and upload the
+# diff as an artifact. The metadata team should be alerted to the change.
 #
-# Compares the dbt version of the branch run on vs 
-# the latest official schema releases found in schemas.getdbt.com
+# **why?**
+# Reaction work may need to be done if artifact schema changes
+# occur so we want to proactively alert to it.
 #
-# Uploads the diff of schema changes if detected
-name: Schema Check
+# **when?**
+# On pushes to `develop` and release branches. Manual runs are also enabled.
+name: Artifact Schema Check
 
 on:
   workflow_dispatch:
-  pull_request:
+  pull_request: #TODO: remove before merging
+  push:
+    branches:
+      - "develop"
+      - "*.latest"
+      - "releases/*"
 
 env:
   LATEST_SCHEMA_PATH: ${{ github.workspace }}/new_schemas
