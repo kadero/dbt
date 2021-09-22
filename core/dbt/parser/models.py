@@ -45,7 +45,7 @@ class ModelParser(SimpleSQLParser[ParsedModelNode]):
         statically_parsed: Optional[Union[str, Dict[str, List[Any]]]] = None
         experimental_sample: Optional[Union[str, Dict[str, List[Any]]]] = None
 
-        # sample the experimental parser during a normal run that hasn't explicitly 
+        # sample the experimental parser during a normal run that hasn't explicitly
         # turned of static parsing.
         if sample and not flags.NO_STATIC_PARSER:
             logger.debug(f"1610: conducting experimental parser sample on {node.path}")
