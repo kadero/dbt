@@ -7,6 +7,7 @@
 ### Under the hood
 
 - Enact deprecation for `materialization-return` and replace deprecation warning with an exception. ([#3896](https://github.com/dbt-labs/dbt/issues/3896))
+- Enact deprecation for `adapter-macro` and replace deprecation warning with an exception. ([#3901](https://github.com/dbt-labs/dbt/issues/3901))
 
 ## dbt 0.21.0 (Release TBD)
 
