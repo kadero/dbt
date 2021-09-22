@@ -106,15 +106,6 @@ class ExecuteMacrosReleaseDeprecation(DBTDeprecation):
     '''
 
 
-class AdapterMacroDeprecation(DBTDeprecation):
-    _name = 'adapter-macro'
-    _description = '''\
-    The "adapter_macro" macro has been deprecated. Instead, use the
-    `adapter.dispatch` method to find a macro and call the result.
-    adapter_macro was called for: {macro_name}
-    '''
-
-
 class PackageRedirectDeprecation(DBTDeprecation):
     _name = 'package-redirect'
     _description = '''\
@@ -166,7 +157,6 @@ deprecations_list: List[DBTDeprecation] = [
     ColumnQuotingDeprecation(),
     ModelsKeyNonModelDeprecation(),
     ExecuteMacrosReleaseDeprecation(),
-    AdapterMacroDeprecation(),
     PackageRedirectDeprecation()
 ]
 
