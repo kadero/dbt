@@ -587,7 +587,7 @@ class GraphRunnableTask(ManifestTask):
             default_false_keys = (
                 'debug', 'full_refresh', 'fail_fast', 'warn_error',
                 'single_threaded', 'log_cache_events',
-                'use_experimental_parser',
+                'use_experimental_parser', 'no_static_parser',
             )
             if key in default_false_keys and var_args[key] is False:
                 continue

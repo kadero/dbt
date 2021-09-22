@@ -23,6 +23,48 @@ class TestBasicExperimentalParser(DBTIntegrationTest):
     def models(self):
         return "basic"
 
+    @use_profile('postgres')
+    def test_postgres_env_use_experimental_parser(self):
+        def cleanup():
+            os.environ['DBT_USE_EXPERIMENTAL_PARSER'] = 'false'
+            
+        self.addCleanup(cleanup)
+        os.environ['DBT_USE_EXPERIMENTAL_PARSER'] = 'true'
+        _, log_output = self.run_dbt_and_capture(['--debug', 'parse'])
+
+        # successful stable static parsing
+        self.assertFalse("1699: " in log_output)
+        # successful experimental static parsing
+        self.assertTrue("1698: " in log_output)
+        # experimental parser failed
+        self.assertFalse("1604: " in log_output)
+        # static parser failed
+        self.assertFalse("1603: " in log_output)
+        # jinja rendering
+        self.assertFalse("1602: " in log_output)
+
+    @use_profile('postgres')
+    def test_postgres_env_no_static_parser(self):
+        def cleanup():
+            os.environ['DBT_NO_STATIC_PARSER'] = 'false'
+            
+        self.addCleanup(cleanup)
+        os.environ['DBT_NO_STATIC_PARSER'] = 'true'
+        _, log_output = self.run_dbt_and_capture(['--debug', 'parse'])
+
+        print(log_output)
+
+        # successful stable static parsing
+        self.assertFalse("1699: " in log_output)
+        # successful experimental static parsing
+        self.assertFalse("1698: " in log_output)
+        # experimental parser failed
+        self.assertFalse("1604: " in log_output)
+        # static parser failed
+        self.assertFalse("1603: " in log_output)
+        # jinja rendering
+        self.assertTrue("1602: " in log_output)
+
     # test that the experimental parser extracts some basic ref, source, and config calls.
     @use_profile('postgres')
     def test_postgres_experimental_parser_basic(self):
@@ -34,18 +76,11 @@ class TestBasicExperimentalParser(DBTIntegrationTest):
         self.assertEqual(node.config._extra, {'x': True})
         self.assertEqual(node.config.tags, ['hello', 'world'])
 
-    @use_profile('postgres')
-    def test_postgres_env_experimental_parser(self):
-        os.environ['DBT_USE_EXPERIMENTAL_PARSER'] = 'true'
-        results = self.run_dbt(['parse'])
-
     # test that the static parser extracts some basic ref, source, and config calls by default
-    # without the experimental flag
+    # without the experimental flag and without rendering jinja
     @use_profile('postgres')
     def test_postgres_static_parser_basic(self):
         _, log_output = self.run_dbt_and_capture(['--debug', 'parse'])
-        
-        print(log_output)
 
         # successful stable static parsing
         self.assertTrue("1699: " in log_output)
@@ -55,6 +90,8 @@ class TestBasicExperimentalParser(DBTIntegrationTest):
         self.assertFalse("1604: " in log_output)
         # static parser failed
         self.assertFalse("1603: " in log_output)
+        # jinja rendering
+        self.assertFalse("1602: " in log_output)
 
         manifest = get_manifest()
         node = manifest.nodes['model.test.model_a']
@@ -67,8 +104,6 @@ class TestBasicExperimentalParser(DBTIntegrationTest):
     @use_profile('postgres')
     def test_postgres_static_parser_is_disabled(self):
         _, log_output = self.run_dbt_and_capture(['--debug', '--no-static-parser', 'parse'])
-        
-        print(log_output)
 
         # successful stable static parsing
         self.assertFalse("1699: " in log_output)
@@ -134,8 +169,6 @@ class TestSourceOverrideExperimentalParser(DBTIntegrationTest):
     @use_profile('postgres')
     def test_postgres_experimental_parser_source_override(self):
         _, log_output = self.run_dbt_and_capture(['--debug', '--use-experimental-parser', 'parse'])
-        
-        print(log_output)
 
         # successful experimental static parsing
         self.assertFalse("1698: " in log_output)
@@ -166,8 +199,6 @@ class TestConfigOverrideExperimentalParser(DBTIntegrationTest):
     @use_profile('postgres')
     def test_postgres_experimental_parser_config_override(self):
         _, log_output = self.run_dbt_and_capture(['--debug', '--use-experimental-parser', 'parse'])
-        
-        print(log_output)
 
         # successful experimental static parsing
         self.assertFalse("1698: " in log_output)
