@@ -38,7 +38,7 @@ class TestBasicExperimentalParser(DBTIntegrationTest):
     def test_postgres_env_experimental_parser(self):
         os.environ['DBT_USE_EXPERIMENTAL_PARSER'] = 'true'
         results = self.run_dbt(['parse'])
-        
+
     # test that the static parser extracts some basic ref, source, and config calls by default
     # without the experimental flag
     @use_profile('postgres')
@@ -62,6 +62,24 @@ class TestBasicExperimentalParser(DBTIntegrationTest):
         self.assertEqual(node.sources, [['my_src', 'my_tbl']])
         self.assertEqual(node.config._extra, {'x': True})
         self.assertEqual(node.config.tags, ['hello', 'world'])
+
+    # test that the static parser doesn't run when the flag is set
+    @use_profile('postgres')
+    def test_postgres_static_parser_is_disabled(self):
+        _, log_output = self.run_dbt_and_capture(['--debug', '--no-static-parser', 'parse'])
+        
+        print(log_output)
+
+        # successful stable static parsing
+        self.assertFalse("1699: " in log_output)
+        # successful experimental static parsing
+        self.assertFalse("1698: " in log_output)
+        # experimental parser failed
+        self.assertFalse("1604: " in log_output)
+        # static parser failed
+        self.assertFalse("1603: " in log_output)
+        # jinja rendering
+        self.assertTrue("1602: " in log_output)
 
 
 class TestRefOverrideExperimentalParser(DBTIntegrationTest):

@@ -19,6 +19,7 @@ GREEDY = None  # subcommand
 
 # Global CLI commands
 USE_EXPERIMENTAL_PARSER = None
+NO_STATIC_PARSER = None
 WARN_ERROR = None
 WRITE_JSON = None
 PARTIAL_PARSE = None
@@ -91,8 +92,8 @@ MP_CONTEXT = _get_context()
 
 def set_from_args(args, user_config):
     global STRICT_MODE, FULL_REFRESH, WARN_ERROR, \
-        USE_EXPERIMENTAL_PARSER, WRITE_JSON, PARTIAL_PARSE, USE_COLORS, \
-        STORE_FAILURES, PROFILES_DIR, DEBUG, LOG_FORMAT, GREEDY, \
+        USE_EXPERIMENTAL_PARSER, NO_STATIC_PARSER, WRITE_JSON, PARTIAL_PARSE, \
+        USE_COLORS, STORE_FAILURES, PROFILES_DIR, DEBUG, LOG_FORMAT, GREEDY, \
         VERSION_CHECK, FAIL_FAST, SEND_ANONYMOUS_USAGE_STATS, PRINTER_WIDTH
 
     STRICT_MODE = False  # backwards compatibility
@@ -103,6 +104,7 @@ def set_from_args(args, user_config):
 
     # global cli flags with env var and user_config alternatives
     USE_EXPERIMENTAL_PARSER = get_flag_value('USE_EXPERIMENTAL_PARSER', args, user_config)
+    NO_STATIC_PARSER = get_flag_value('NO_STATIC_PARSER', args, user_config)
     WARN_ERROR = get_flag_value('WARN_ERROR', args, user_config)
     WRITE_JSON = get_flag_value('WRITE_JSON', args, user_config)
     PARTIAL_PARSE = get_flag_value('PARTIAL_PARSE', args, user_config)
