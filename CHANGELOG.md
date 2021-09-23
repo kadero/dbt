@@ -7,9 +7,18 @@
 ### Under the hood
 
 - Enact deprecation for `materialization-return` and replace deprecation warning with an exception. ([#3896](https://github.com/dbt-labs/dbt/issues/3896))
+- Build catalog for only relational, non-ephemeral nodes in the graph ([#3920](https://github.com/dbt-labs/dbt/issues/3920))
 - Enact deprecation for `adapter-macro` and replace deprecation warning with an exception. ([#3901](https://github.com/dbt-labs/dbt/issues/3901))
 
+Contributors:
+
+- [@dave-connors-3](https://github.com/dave-connors-3) ([#3920](https://github.com/dbt-labs/dbt/issues/3920))
+
+
 ## dbt 0.21.0 (Release TBD)
+
+### Fixes
+- Fix batching for large seeds on Snowflake ([#3941](https://github.com/dbt-labs/dbt/issues/3941), [#3942](https://github.com/dbt-labs/dbt/pull/3942))
 
 ## dbt 0.21.0rc1 (September 20, 2021)
 
