@@ -162,20 +162,22 @@ class TimePeriod(StrEnum):
 
 
 @dataclass
-class Time(dbtClassMixin, Replaceable):
-    count: int
-    period: TimePeriod
+class Time(dbtClassMixin, Mergeable):
+    count: Optional[int] = None
+    period: Optional[TimePeriod] = None
 
     def exceeded(self, actual_age: float) -> bool:
         kwargs = {self.period.plural(): self.count}
         difference = timedelta(**kwargs).total_seconds()
         return actual_age > difference
 
+    def __bool__(self):
+        return self.count is not None and self.period is not None
 
 @dataclass
 class FreshnessThreshold(dbtClassMixin, Mergeable):
-    warn_after: Optional[Time] = None
-    error_after: Optional[Time] = None
+    warn_after: Optional[Time] = field(default_factory=Time)
+    error_after: Optional[Time] = field(default_factory=Time)
     filter: Optional[str] = None
 
     def status(self, age: float) -> "dbt.contracts.results.FreshnessStatus":
@@ -188,8 +190,7 @@ class FreshnessThreshold(dbtClassMixin, Mergeable):
             return FreshnessStatus.Pass
 
     def __bool__(self):
-        return self.warn_after is not None or self.error_after is not None
-
+        return bool(self.warn_after) or bool(self.error_after)
 
 @dataclass
 class AdditionalPropertiesAllowed(

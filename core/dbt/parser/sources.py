@@ -348,6 +348,12 @@ def merge_freshness(
     base: Optional[FreshnessThreshold], update: Optional[FreshnessThreshold]
 ) -> Optional[FreshnessThreshold]:
     if base is not None and update is not None:
+        if base.error_after is None and update.error_after is None:
+            return base.merged(update)
+        if base.error_after is None and update.error_after is not None:
+            return update
+        if update is None:
+            return None
         return base.merged(update)
     elif base is None and update is not None:
         return update
