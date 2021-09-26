@@ -14,6 +14,7 @@ Contributors:
 
 - [@dave-connors-3](https://github.com/dave-connors-3) ([#3920](https://github.com/dbt-labs/dbt/issues/3920))
 
+
 ## dbt 0.21.0 (Release TBD)
 
 ### Fixes
