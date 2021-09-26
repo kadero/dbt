@@ -14,7 +14,6 @@ Contributors:
 
 - [@dave-connors-3](https://github.com/dave-connors-3) ([#3920](https://github.com/dbt-labs/dbt/issues/3920))
 
-
 ## dbt 0.21.0 (Release TBD)
 
 ### Fixes
@@ -22,6 +21,10 @@ Contributors:
 
 ### Under the hood
 - Bump artifact schema versions for 0.21.0 ([#3945](https://github.com/dbt-labs/dbt/pull/3945))
+
+Contributors:
+
+- [@kadero](https://github.com/kadero) ([#3952](https://github.com/dbt-labs/dbt/issues/3952))
 
 ## dbt 0.21.0rc1 (September 20, 2021)
 
