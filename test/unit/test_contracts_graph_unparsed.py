@@ -209,15 +209,12 @@ class TestFreshnessThreshold(ContractTestCase):
         )
         threshold = self.ContractType(
             warn_after=Time(count=18, period=TimePeriod.hour),
-            error_after=Time(count=2, period=TimePeriod.day),
+            error_after=Time(count=None, period=None),
         )
         self.assertEqual(threshold, t1.merged(t2))
 
-        error_seconds = timedelta(days=3).total_seconds()
         warn_seconds = timedelta(days=1).total_seconds()
         pass_seconds = timedelta(hours=3).total_seconds()
-        self.assertEqual(threshold.status(
-            error_seconds), FreshnessStatus.Error)
         self.assertEqual(threshold.status(warn_seconds), FreshnessStatus.Warn)
         self.assertEqual(threshold.status(pass_seconds), FreshnessStatus.Pass)
 
