@@ -192,6 +192,7 @@ class FreshnessThreshold(dbtClassMixin, Mergeable):
     def __bool__(self):
         return bool(self.warn_after) or bool(self.error_after)
 
+
 @dataclass
 class AdditionalPropertiesAllowed(
     AdditionalPropertiesMixin,
