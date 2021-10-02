@@ -344,7 +344,10 @@ class SourcePatcher:
         msg.append('')
         return '\n'.join(msg)
 
-def merge_time(base: Optional[Time], update: Optional[Time]) -> Optional[Time]:
+
+def merge_freshness_time_thresholds(
+    base: Optional[Time], update: Optional[Time]
+) -> Optional[Time]:
     if base is None and update is None:
         return None
     elif base is None and update is not None:
@@ -352,20 +355,21 @@ def merge_time(base: Optional[Time], update: Optional[Time]) -> Optional[Time]:
     elif base is not None and update is None:
         return base
     else:
-        # base and update not none
+        # base and update are not none
         return base.merged(update)
+
 
 def merge_freshness(
     base: Optional[FreshnessThreshold], update: Optional[FreshnessThreshold]
 ) -> Optional[FreshnessThreshold]:
     if base is not None and update is not None:
         merged_freshness = base.merged(update)
-        # merge one level deeper error and warn after threshold
-        merged_error_after = merge_time(base.error_after, update.error_after)
-        merged_warn_after = merge_time(base.warn_after, update.warn_after)
-        
+        # merge one level deeper the error_after and warn_after thresholds
+        merged_error_after = merge_freshness_time_thresholds(base.error_after, update.error_after)
+        merged_warn_after = merge_freshness_time_thresholds(base.warn_after, update.warn_after)
+
         merged_freshness.error_after = merged_error_after
-        merged_freshness.warn_after = merged_warn_after     
+        merged_freshness.warn_after = merged_warn_after
         return merged_freshness
     elif base is None and update is not None:
         return update

@@ -174,6 +174,7 @@ class Time(dbtClassMixin, Mergeable):
     def __bool__(self):
         return self.count is not None and self.period is not None
 
+
 @dataclass
 class FreshnessThreshold(dbtClassMixin, Mergeable):
     warn_after: Optional[Time] = field(default_factory=Time)
