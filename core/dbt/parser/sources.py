@@ -346,11 +346,14 @@ class SourcePatcher:
 
 def merge_error_after(base: Optional[Time], update: Optional[Time]) -> Optional[Time]:
     if base is None and update is None:
-        return base.merged(update)
-    if base is None and update is not None:
-        return update
-    if update is None:
         return None
+    elif base is None and update is not None:
+        return update
+    elif base is not None and update is None:
+        return base
+    else:
+        # base and update not none
+        return base.merged(update)
 
 def merge_freshness(
     base: Optional[FreshnessThreshold], update: Optional[FreshnessThreshold]
