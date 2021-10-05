@@ -167,7 +167,9 @@ class Time(dbtClassMixin, Mergeable):
     period: Optional[TimePeriod] = None
 
     def exceeded(self, actual_age: float) -> bool:
-        kwargs = {self.period.plural(): self.count}
+        if self.period is None or self.count is None:
+            return False
+        kwargs: Dict[str, int] = {self.period.plural(): self.count}
         difference = timedelta(**kwargs).total_seconds()
         return actual_age > difference
 
