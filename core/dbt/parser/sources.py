@@ -348,15 +348,10 @@ class SourcePatcher:
 def merge_freshness_time_thresholds(
     base: Optional[Time], update: Optional[Time]
 ) -> Optional[Time]:
-    if base is not None and update is not None:
+    if base and update:
         return base.merged(update)
-    elif base is None and update is not None:
-        return update
-    elif base is not None and update is None:
-        return base
     else:
-        # base and update are none
-        return None
+        return update or base
 
 
 def merge_freshness(
