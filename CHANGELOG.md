@@ -2,6 +2,7 @@
 
 ### Features
 - Normalize global CLI arguments/flags ([#2990](https://github.com/dbt-labs/dbt/issues/2990), [#3839](https://github.com/dbt-labs/dbt/pull/3839))
+- Allow nullable error_after in source freshness ([#3874](https://github.com/dbt-labs/dbt-core/issues/3874), [3955](https://github.com/dbt-labs/dbt-core/pull/3955))
 
 ### Fixes
 
@@ -13,7 +14,7 @@
 Contributors:
 
 - [@dave-connors-3](https://github.com/dave-connors-3) ([#3920](https://github.com/dbt-labs/dbt/issues/3920))
-
+- [@kadero](https://github.com/kadero) ([3955](https://github.com/dbt-labs/dbt-core/pull/3955))
 
 ## dbt 0.21.0 (Release TBD)
 
