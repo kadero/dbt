@@ -15,7 +15,6 @@ import dbt.exceptions
 from dbt import flags
 from dbt.adapters.factory import load_plugin
 from dbt.adapters.postgres import PostgresCredentials
-from dbt.adapters.redshift import RedshiftCredentials
 from dbt.context.base import generate_base_context
 from dbt.contracts.connection import QueryComment, DEFAULT_QUERY_COMMENT
 from dbt.contracts.project import PackageConfig, LocalPackage, GitPackage
@@ -36,6 +35,7 @@ def temp_cd(path):
         yield
     finally:
         os.chdir(current_path)
+
 
 @contextmanager
 def raises_nothing():
@@ -126,15 +126,6 @@ class BaseConfigTest(unittest.TestCase):
                         'dbname': 'postgres-db-name',
                         'schema': 'postgres-schema',
                         'threads': 7,
-                    },
-                    'redshift': {
-                        'type': 'redshift',
-                        'host': 'redshift-db-hostname',
-                        'port': 5555,
-                        'user': 'db_user',
-                        'pass': 'db_pass',
-                        'dbname': 'redshift-db-name',
-                        'schema': 'redshift-schema',
                     },
                     'with-vars': {
                         'type': "{{ env_var('env_value_type') }}",
@@ -321,6 +312,17 @@ class TestProfile(BaseConfigTest):
         self.assertEqual(profile.target_name, 'default')
         self.assertEqual(profile.credentials.type, 'postgres')
 
+    def test_extra_path(self):
+        self.default_project_data.update({
+            'model-paths': ['models'],
+            'source-paths': ['other-models'],
+        })
+        with self.assertRaises(dbt.exceptions.DbtProjectError) as exc:            
+            project = project_from_config_norender(self.default_project_data)
+
+        self.assertIn('source-paths and model-paths', str(exc.exception))
+        self.assertIn('cannot both be defined.', str(exc.exception))
+
     def test_profile_invalid_project(self):
         renderer = empty_profile_renderer()
         with self.assertRaises(dbt.exceptions.DbtProjectError) as exc:
@@ -342,7 +344,6 @@ class TestProfile(BaseConfigTest):
 
         self.assertIn('nope', str(exc.exception))
         self.assertIn('- postgres', str(exc.exception))
-        self.assertIn('- redshift', str(exc.exception))
         self.assertIn('- with-vars', str(exc.exception))
 
     def test_no_outputs(self):
@@ -452,28 +453,6 @@ class TestProfileFile(BaseFileTest):
         self.assertEqual(profile.credentials.password, 'other_db_pass')
         self.assertEqual(profile.credentials.schema, 'other-postgres-schema')
         self.assertEqual(profile.credentials.database, 'other-postgres-db-name')
-        self.assertEqual(profile, from_raw)
-
-    def test_target_override(self):
-        self.args.target = 'redshift'
-        profile = self.from_args()
-        from_raw = self.from_raw_profile_info(
-                target_override='redshift'
-            )
-
-        self.assertEqual(profile.profile_name, 'default')
-        self.assertEqual(profile.target_name, 'redshift')
-        self.assertEqual(profile.threads, 1)
-        self.assertTrue(profile.user_config.send_anonymous_usage_stats)
-        self.assertIsNone(profile.user_config.use_colors)
-        self.assertTrue(isinstance(profile.credentials, RedshiftCredentials))
-        self.assertEqual(profile.credentials.type, 'redshift')
-        self.assertEqual(profile.credentials.host, 'redshift-db-hostname')
-        self.assertEqual(profile.credentials.port, 5555)
-        self.assertEqual(profile.credentials.user, 'db_user')
-        self.assertEqual(profile.credentials.password, 'db_pass')
-        self.assertEqual(profile.credentials.schema, 'redshift-schema')
-        self.assertEqual(profile.credentials.database, 'redshift-db-name')
         self.assertEqual(profile, from_raw)
 
     def test_env_vars(self):
@@ -618,17 +597,17 @@ class TestProject(BaseConfigTest):
         self.assertEqual(project.version, '0.0.1')
         self.assertEqual(project.profile_name, 'default')
         self.assertEqual(project.project_root, '/invalid-root-path')
-        self.assertEqual(project.source_paths, ['models'])
+        self.assertEqual(project.model_paths, ['models'])
         self.assertEqual(project.macro_paths, ['macros'])
-        self.assertEqual(project.data_paths, ['data'])
-        self.assertEqual(project.test_paths, ['test'])
-        self.assertEqual(project.analysis_paths, [])
-        self.assertEqual(project.docs_paths, ['models', 'data', 'snapshots', 'macros'])
+        self.assertEqual(project.seed_paths, ['seeds'])
+        self.assertEqual(project.test_paths, ['tests'])
+        self.assertEqual(project.analysis_paths, ['analyses'])
+        self.assertEqual(project.docs_paths, ['models', 'seeds', 'snapshots', 'analyses', 'macros'])
         self.assertEqual(project.asset_paths, [])
         self.assertEqual(project.target_path, 'target')
         self.assertEqual(project.clean_targets, ['target'])
         self.assertEqual(project.log_path, 'logs')
-        self.assertEqual(project.modules_path, 'dbt_modules')
+        self.assertEqual(project.packages_install_path, 'dbt_packages')
         self.assertEqual(project.quoting, {})
         self.assertEqual(project.models, {})
         self.assertEqual(project.on_run_start, [])
@@ -652,11 +631,11 @@ class TestProject(BaseConfigTest):
 
     def test_implicit_overrides(self):
         self.default_project_data.update({
-            'source-paths': ['other-models'],
+            'model-paths': ['other-models'],
             'target-path': 'other-target',
         })
         project = project_from_config_norender(self.default_project_data)
-        self.assertEqual(project.docs_paths, ['other-models', 'data', 'snapshots', 'macros'])
+        self.assertEqual(project.docs_paths, ['other-models', 'seeds', 'snapshots', 'analyses', 'macros'])
         self.assertEqual(project.clean_targets, ['other-target'])
 
     def test_hashed_name(self):
@@ -665,17 +644,17 @@ class TestProject(BaseConfigTest):
 
     def test_all_overrides(self):
         self.default_project_data.update({
-            'source-paths': ['other-models'],
+            'model-paths': ['other-models'],
             'macro-paths': ['other-macros'],
-            'data-paths': ['other-data'],
-            'test-paths': ['other-test'],
-            'analysis-paths': ['analysis'],
+            'seed-paths': ['other-seeds'],
+            'test-paths': ['other-tests'],
+            'analysis-paths': ['other-analyses'],
             'docs-paths': ['docs'],
             'asset-paths': ['other-assets'],
             'target-path': 'other-target',
             'clean-targets': ['another-target'],
             'log-path': 'other-logs',
-            'modules-path': 'other-dbt_modules',
+            'packages-install-path': 'other-dbt_packages',
             'quoting': {'identifier': False},
             'models': {
                 'pre-hook': ['{{ logging.log_model_start_event() }}'],
@@ -735,17 +714,17 @@ class TestProject(BaseConfigTest):
         self.assertEqual(project.version, '0.0.1')
         self.assertEqual(project.profile_name, 'default')
         self.assertEqual(project.project_root, '/invalid-root-path')
-        self.assertEqual(project.source_paths, ['other-models'])
+        self.assertEqual(project.model_paths, ['other-models'])
         self.assertEqual(project.macro_paths, ['other-macros'])
-        self.assertEqual(project.data_paths, ['other-data'])
-        self.assertEqual(project.test_paths, ['other-test'])
-        self.assertEqual(project.analysis_paths, ['analysis'])
+        self.assertEqual(project.seed_paths, ['other-seeds'])
+        self.assertEqual(project.test_paths, ['other-tests'])
+        self.assertEqual(project.analysis_paths, ['other-analyses'])
         self.assertEqual(project.docs_paths, ['docs'])
         self.assertEqual(project.asset_paths, ['other-assets'])
         self.assertEqual(project.target_path, 'other-target')
         self.assertEqual(project.clean_targets, ['another-target'])
         self.assertEqual(project.log_path, 'other-logs')
-        self.assertEqual(project.modules_path, 'other-dbt_modules')
+        self.assertEqual(project.packages_install_path, 'other-dbt_packages')
         self.assertEqual(project.quoting, {'identifier': False})
         self.assertEqual(project.models, {
             'pre-hook': ['{{ logging.log_model_start_event() }}'],
@@ -1230,17 +1209,17 @@ class TestRuntimeConfigFiles(BaseFileTest):
         # on osx, for example, these are not necessarily equal due to /private
         self.assertTrue(os.path.samefile(config.project_root,
                                          self.project_dir))
-        self.assertEqual(config.source_paths, ['models'])
+        self.assertEqual(config.model_paths, ['models'])
         self.assertEqual(config.macro_paths, ['macros'])
-        self.assertEqual(config.data_paths, ['data'])
-        self.assertEqual(config.test_paths, ['test'])
-        self.assertEqual(config.analysis_paths, [])
-        self.assertEqual(config.docs_paths, ['models', 'data', 'snapshots', 'macros'])
+        self.assertEqual(config.seed_paths, ['seeds'])
+        self.assertEqual(config.test_paths, ['tests'])
+        self.assertEqual(config.analysis_paths, ['analyses'])
+        self.assertEqual(config.docs_paths, ['models', 'seeds', 'snapshots', 'analyses', 'macros'])
         self.assertEqual(config.asset_paths, [])
         self.assertEqual(config.target_path, 'target')
         self.assertEqual(config.clean_targets, ['target'])
         self.assertEqual(config.log_path, 'logs')
-        self.assertEqual(config.modules_path, 'dbt_modules')
+        self.assertEqual(config.packages_install_path, 'dbt_packages')
         self.assertEqual(config.quoting, {'database': True, 'identifier': True, 'schema': True})
         self.assertEqual(config.models, {})
         self.assertEqual(config.on_run_start, [])

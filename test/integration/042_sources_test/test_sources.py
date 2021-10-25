@@ -24,7 +24,7 @@ class BaseSourcesTest(DBTIntegrationTest):
     def project_config(self):
         return {
             'config-version': 2,
-            'data-paths': ['data'],
+            'seed-paths': ['seeds'],
             'quoting': {'database': True, 'schema': True, 'identifier': True},
             'seeds': {
                 'quote_columns': True,
@@ -74,8 +74,7 @@ class SuccessfulSourcesTest(BaseSourcesTest):
             'blue',{id},'Jake','abc@example.com','192.168.1.1','{time}'
         )"""
         quoted_columns = ','.join(
-            self.adapter.quote(c) if self.adapter_type != 'bigquery' else c
-            for c in
+            self.adapter.quote(c) for c in
             ('favorite_color', 'id', 'first_name',
              'email', 'ip_address', 'updated_at')
         )
@@ -358,18 +357,6 @@ class TestSourceFreshness(SuccessfulSourcesTest):
         self.assertEqual(results[0].status, 'pass')
         self._assert_freshness_results('target/pass_source.json', 'pass')
 
-    @use_profile('snowflake')
-    def test_snowflake_source_freshness(self):
-        self._run_source_freshness()
-
-    @use_profile('redshift')
-    def test_redshift_source_freshness(self):
-        self._run_source_freshness()
-
-    @use_profile('bigquery')
-    def test_bigquery_source_freshness(self):
-        self._run_source_freshness()
-
     @use_profile('postgres')
     def test_postgres_source_freshness_selection_select(self):
         """Tests node selection using the --select argument."""
@@ -386,7 +373,7 @@ class TestSourceFreshness(SuccessfulSourcesTest):
 
     @use_profile('postgres')
     def test_postgres_source_freshness_selection_exclude(self):
-        """Tests node selection using the --select argument. It 'excludes' the 
+        """Tests node selection using the --select argument. It 'excludes' the
         only source in the project so it should return no results."""
         self._set_updated_at_to(timedelta(hours=-2))
         self.freshness_start_time = datetime.utcnow()
@@ -566,10 +553,5 @@ class TestUnquotedSources(SuccessfulSourcesTest):
 
     @use_profile('postgres')
     def test_postgres_catalog(self):
-        self.run_dbt_with_vars(['run'])
-        self.run_dbt_with_vars(['docs', 'generate'])
-
-    @use_profile('redshift')
-    def test_redshift_catalog(self):
         self.run_dbt_with_vars(['run'])
         self.run_dbt_with_vars(['docs', 'generate'])

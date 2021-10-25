@@ -174,8 +174,10 @@ class Project(HyphenatedDbtClassMixin, Replaceable):
     config_version: int
     project_root: Optional[str] = None
     source_paths: Optional[List[str]] = None
+    model_paths: Optional[List[str]] = None
     macro_paths: Optional[List[str]] = None
     data_paths: Optional[List[str]] = None
+    seed_paths: Optional[List[str]] = None
     test_paths: Optional[List[str]] = None
     analysis_paths: Optional[List[str]] = None
     docs_paths: Optional[List[str]] = None
@@ -185,7 +187,7 @@ class Project(HyphenatedDbtClassMixin, Replaceable):
     clean_targets: Optional[List[str]] = None
     profile: Optional[str] = None
     log_path: Optional[str] = None
-    modules_path: Optional[str] = None
+    packages_install_path: Optional[str] = None
     quoting: Optional[Quoting] = None
     on_run_start: Optional[List[str]] = field(default_factory=list_str)
     on_run_end: Optional[List[str]] = field(default_factory=list_str)
@@ -235,6 +237,7 @@ class UserConfig(ExtensibleDbtClassMixin, Replaceable, UserConfigContract):
     version_check: Optional[bool] = None
     fail_fast: Optional[bool] = None
     use_experimental_parser: Optional[bool] = None
+    static_parser: Optional[bool] = None
 
 
 @dataclass

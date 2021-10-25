@@ -21,6 +21,7 @@ GREEDY = None  # subcommand
 
 # Global CLI commands
 USE_EXPERIMENTAL_PARSER = None
+STATIC_PARSER = None
 WARN_ERROR = None
 WRITE_JSON = None
 PARTIAL_PARSE = None
@@ -31,15 +32,17 @@ VERSION_CHECK = None
 FAIL_FAST = None
 SEND_ANONYMOUS_USAGE_STATS = None
 PRINTER_WIDTH = 80
+WHICH = None
 
 # Global CLI defaults. These flags are set from three places:
 # CLI args, environment variables, and user_config (profiles.yml).
 # Environment variables use the pattern 'DBT_{flag name}', like DBT_PROFILES_DIR
 flag_defaults = {
     "USE_EXPERIMENTAL_PARSER": False,
+    "STATIC_PARSER": True,
     "WARN_ERROR": False,
     "WRITE_JSON": True,
-    "PARTIAL_PARSE": False,
+    "PARTIAL_PARSE": True,
     "USE_COLORS": True,
     "PROFILES_DIR": DEFAULT_PROFILES_DIR,
     "DEBUG": False,
@@ -75,8 +78,6 @@ def env_set_path(key: str) -> Optional[Path]:
         return Path(value)
 
 
-SINGLE_THREADED_WEBSERVER = env_set_truthy('DBT_SINGLE_THREADED_WEBSERVER')
-SINGLE_THREADED_HANDLER = env_set_truthy('DBT_SINGLE_THREADED_HANDLER')
 MACRO_DEBUGGING = env_set_truthy('DBT_MACRO_DEBUGGING')
 DEFER_MODE = env_set_truthy('DBT_DEFER_TO_STATE')
 ARTIFACT_STATE_PATH = env_set_path('DBT_ARTIFACT_STATE_PATH')
@@ -93,18 +94,21 @@ MP_CONTEXT = _get_context()
 
 def set_from_args(args, user_config):
     global STRICT_MODE, FULL_REFRESH, WARN_ERROR, \
-        USE_EXPERIMENTAL_PARSER, WRITE_JSON, PARTIAL_PARSE, USE_COLORS, \
-        STORE_FAILURES, PROFILES_DIR, DEBUG, LOG_FORMAT, GREEDY, \
-        VERSION_CHECK, FAIL_FAST, SEND_ANONYMOUS_USAGE_STATS, PRINTER_WIDTH
+        USE_EXPERIMENTAL_PARSER, STATIC_PARSER, WRITE_JSON, PARTIAL_PARSE, \
+        USE_COLORS, STORE_FAILURES, PROFILES_DIR, DEBUG, LOG_FORMAT, GREEDY, \
+        VERSION_CHECK, FAIL_FAST, SEND_ANONYMOUS_USAGE_STATS, PRINTER_WIDTH, \
+        WHICH
 
     STRICT_MODE = False  # backwards compatibility
     # cli args without user_config or env var option
     FULL_REFRESH = getattr(args, 'full_refresh', FULL_REFRESH)
     STORE_FAILURES = getattr(args, 'store_failures', STORE_FAILURES)
     GREEDY = getattr(args, 'greedy', GREEDY)
+    WHICH = getattr(args, 'which', WHICH)
 
     # global cli flags with env var and user_config alternatives
     USE_EXPERIMENTAL_PARSER = get_flag_value('USE_EXPERIMENTAL_PARSER', args, user_config)
+    STATIC_PARSER = get_flag_value('STATIC_PARSER', args, user_config)
     WARN_ERROR = get_flag_value('WARN_ERROR', args, user_config)
     WRITE_JSON = get_flag_value('WRITE_JSON', args, user_config)
     PARTIAL_PARSE = get_flag_value('PARTIAL_PARSE', args, user_config)
@@ -147,6 +151,7 @@ def get_flag_value(flag, args, user_config):
 def get_flag_dict():
     return {
         "use_experimental_parser": USE_EXPERIMENTAL_PARSER,
+        "static_parser": STATIC_PARSER,
         "warn_error": WARN_ERROR,
         "write_json": WRITE_JSON,
         "partial_parse": PARTIAL_PARSE,

@@ -13,7 +13,7 @@ from dbt.context.providers import generate_runtime_model
 from dbt.contracts.graph.manifest import Manifest, UniqueID
 from dbt.contracts.graph.compiled import (
     COMPILED_TYPES,
-    CompiledSchemaTestNode,
+    CompiledGenericTestNode,
     GraphMemberNode,
     InjectedCTE,
     ManifestNode,
@@ -111,12 +111,13 @@ def _get_tests_for_node(manifest: Manifest, unique_id: UniqueID) -> List[UniqueI
     """ Get a list of tests that depend on the node with the
     provided unique id """
 
-    return [
-        node.unique_id
-        for _, node in manifest.nodes.items()
-        if node.resource_type == NodeType.Test and
-        unique_id in node.depends_on_nodes
-    ]
+    tests = []
+    if unique_id in manifest.child_map:
+        for child_unique_id in manifest.child_map[unique_id]:
+            if child_unique_id.startswith('test.'):
+                tests.append(child_unique_id)
+
+    return tests
 
 
 class Linker:
@@ -166,7 +167,7 @@ class Compiler:
 
     def initialize(self):
         make_directory(self.config.target_path)
-        make_directory(self.config.modules_path)
+        make_directory(self.config.packages_install_path)
 
     # creates a ModelContext which is converted to
     # a dict for jinja rendering of SQL
@@ -181,7 +182,7 @@ class Compiler:
             node, self.config, manifest
         )
         context.update(extra_context)
-        if isinstance(node, CompiledSchemaTestNode):
+        if isinstance(node, CompiledGenericTestNode):
             # for test nodes, add a special keyword args value to the context
             jinja.add_rendered_test_kwargs(context, node)
 
@@ -429,6 +430,8 @@ class Compiler:
 
         if cycle:
             raise RuntimeError("Found a cycle: {}".format(cycle))
+
+        manifest.build_parent_and_child_maps()
 
         self.resolve_graph(linker, manifest)
 

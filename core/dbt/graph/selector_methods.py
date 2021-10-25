@@ -8,17 +8,17 @@ from dbt.dataclass_schema import StrEnum
 from .graph import UniqueId
 
 from dbt.contracts.graph.compiled import (
-    CompiledDataTestNode,
-    CompiledSchemaTestNode,
+    CompiledSingularTestNode,
+    CompiledGenericTestNode,
     CompileResultNode,
     ManifestNode,
 )
 from dbt.contracts.graph.manifest import Manifest, WritableManifest
 from dbt.contracts.graph.parsed import (
     HasTestMetadata,
-    ParsedDataTestNode,
+    ParsedSingularTestNode,
     ParsedExposure,
-    ParsedSchemaTestNode,
+    ParsedGenericTestNode,
     ParsedSourceDefinition,
 )
 from dbt.contracts.state import PreviousState
@@ -45,6 +45,7 @@ class MethodName(StrEnum):
     ResourceType = 'resource_type'
     State = 'state'
     Exposure = 'exposure'
+    Result = 'result'
 
 
 def is_selected_node(fqn: List[str], node_selector: str):
@@ -361,14 +362,15 @@ class TestTypeSelectorMethod(SelectorMethod):
         self, included_nodes: Set[UniqueId], selector: str
     ) -> Iterator[UniqueId]:
         search_types: Tuple[Type, ...]
-        if selector == 'schema':
-            search_types = (ParsedSchemaTestNode, CompiledSchemaTestNode)
-        elif selector == 'data':
-            search_types = (ParsedDataTestNode, CompiledDataTestNode)
+        # continue supporting 'schema' + 'data' for backwards compatibility
+        if selector in ('generic', 'schema'):
+            search_types = (ParsedGenericTestNode, CompiledGenericTestNode)
+        elif selector in ('singular', 'data'):
+            search_types = (ParsedSingularTestNode, CompiledSingularTestNode)
         else:
             raise RuntimeException(
-                f'Invalid test type selector {selector}: expected "data" or '
-                '"schema"'
+                f'Invalid test type selector {selector}: expected "generic" or '
+                '"singular"'
             )
 
         for node, real_node in self.parsed_nodes(included_nodes):
@@ -405,27 +407,38 @@ class StateSelectorMethod(SelectorMethod):
 
         return modified
 
-    def recursively_check_macros_modified(self, node):
-        # check if there are any changes in macros the first time
-        if self.modified_macros is None:
-            self.modified_macros = self._macros_modified()
-
+    def recursively_check_macros_modified(self, node, previous_macros):
         # loop through all macros that this node depends on
         for macro_uid in node.depends_on.macros:
+            # avoid infinite recursion if we've already seen this macro
+            if macro_uid in previous_macros:
+                continue
+            previous_macros.append(macro_uid)
             # is this macro one of the modified macros?
             if macro_uid in self.modified_macros:
                 return True
             # if not, and this macro depends on other macros, keep looping
-            macro = self.manifest.macros[macro_uid]
-            if len(macro.depends_on.macros) > 0:
-                return self.recursively_check_macros_modified(macro)
+            macro_node = self.manifest.macros[macro_uid]
+            if len(macro_node.depends_on.macros) > 0:
+                return self.recursively_check_macros_modified(macro_node, previous_macros)
             else:
                 return False
-        return False
+
+    def check_macros_modified(self, node):
+        # check if there are any changes in macros the first time
+        if self.modified_macros is None:
+            self.modified_macros = self._macros_modified()
+        # no macros have been modified, skip looping entirely
+        if not self.modified_macros:
+            return False
+        # recursively loop through upstream macros to see if any is modified
+        else:
+            previous_macros = []
+            return self.recursively_check_macros_modified(node, previous_macros)
 
     def check_modified(self, old: Optional[SelectorTarget], new: SelectorTarget) -> bool:
         different_contents = not new.same_contents(old)  # type: ignore
-        upstream_macro_change = self.recursively_check_macros_modified(new)
+        upstream_macro_change = self.check_macros_modified(new)
         return different_contents or upstream_macro_change
 
     def check_modified_body(self, old: Optional[SelectorTarget], new: SelectorTarget) -> bool:
@@ -457,7 +470,7 @@ class StateSelectorMethod(SelectorMethod):
             return False
 
     def check_modified_macros(self, _, new: SelectorTarget) -> bool:
-        return self.recursively_check_macros_modified(new)
+        return self.check_macros_modified(new)
 
     def check_new(self, old: Optional[SelectorTarget], new: SelectorTarget) -> bool:
         return old is None
@@ -504,6 +517,23 @@ class StateSelectorMethod(SelectorMethod):
                 yield node
 
 
+class ResultSelectorMethod(SelectorMethod):
+    def search(
+        self, included_nodes: Set[UniqueId], selector: str
+    ) -> Iterator[UniqueId]:
+        if self.previous_state is None or self.previous_state.results is None:
+            raise InternalException(
+                'No comparison run_results'
+            )
+        matches = set(
+            result.unique_id for result in self.previous_state.results
+            if result.status == selector
+        )
+        for node, real_node in self.all_nodes(included_nodes):
+            if node in matches:
+                yield node
+
+
 class MethodManager:
     SELECTOR_METHODS: Dict[MethodName, Type[SelectorMethod]] = {
         MethodName.FQN: QualifiedNameSelectorMethod,
@@ -516,6 +546,7 @@ class MethodManager:
         MethodName.TestType: TestTypeSelectorMethod,
         MethodName.State: StateSelectorMethod,
         MethodName.Exposure: ExposureSelectorMethod,
+        MethodName.Result: ResultSelectorMethod,
     }
 
     def __init__(

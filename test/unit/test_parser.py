@@ -5,19 +5,21 @@ from unittest import mock
 import os
 import yaml
 
+from copy import deepcopy
 import dbt.flags
 import dbt.parser
 from dbt import tracking
+from dbt.context.context_config import ContextConfig
 from dbt.exceptions import CompilationException
 from dbt.parser import (
-    ModelParser, MacroParser, DataTestParser, SchemaParser,
-    SnapshotParser, AnalysisParser
+    ModelParser, MacroParser, SingularTestParser, GenericTestParser,
+    SchemaParser, SnapshotParser, AnalysisParser
 )
 from dbt.parser.schemas import (
     TestablePatchParser, SourceParser, AnalysisPatchParser, MacroPatchParser
 )
 from dbt.parser.search import FileBlock
-from dbt.parser.schema_test_builders import YamlBlock
+from dbt.parser.generic_test_builders import YamlBlock
 from dbt.parser.sources import SourcePatcher
 
 from dbt.node_types import NodeType
@@ -28,10 +30,13 @@ from dbt.contracts.graph.model_config import (
 )
 from dbt.contracts.graph.parsed import (
     ParsedModelNode, ParsedMacro, ParsedNodePatch, DependsOn, ColumnInfo,
-    ParsedDataTestNode, ParsedSnapshotNode, ParsedAnalysisNode,
-    UnpatchedSourceDefinition
+    ParsedSingularTestNode, ParsedGenericTestNode, ParsedSnapshotNode, 
+    ParsedAnalysisNode, UnpatchedSourceDefinition
 )
 from dbt.contracts.graph.unparsed import Docs
+from dbt.parser.models import (
+    _get_config_call_dict, _shift_sources, _get_exp_sample_result, _get_stable_sample_result, _get_sample_result
+)
 import itertools
 from .utils import config_from_parts_or_dicts, normalize, generate_name_macros, MockNode, MockSource, MockDocumentation
 
@@ -61,7 +66,7 @@ class BaseParserTest(unittest.TestCase):
                 unique_id=f'macro.root.{name}',
                 package_name='root',
                 original_file_path=normalize('macros/macro.sql'),
-                root_path=get_abs_os_path('./dbt_modules/root'),
+                root_path=get_abs_os_path('./dbt_packages/root'),
                 path=normalize('macros/macro.sql'),
                 macro_sql=sql,
             )
@@ -69,7 +74,7 @@ class BaseParserTest(unittest.TestCase):
 
     def setUp(self):
         dbt.flags.WARN_ERROR = True
-        # HACK: this is needed since tracking events can 
+        # HACK: this is needed since tracking events can
         # be sent when using the model parser
         tracking.do_not_track()
 
@@ -80,7 +85,7 @@ class BaseParserTest(unittest.TestCase):
             'quoting': {},
             'outputs': {
                 'test': {
-                    'type': 'redshift',
+                    'type': 'postgres',
                     'host': 'localhost',
                     'schema': 'analytics',
                     'user': 'test',
@@ -109,7 +114,7 @@ class BaseParserTest(unittest.TestCase):
             'name': 'snowplow',
             'version': '0.1',
             'profile': 'test',
-            'project-root': get_abs_os_path('./dbt_modules/snowplow'),
+            'project-root': get_abs_os_path('./dbt_packages/snowplow'),
             'config-version': 2,
         }
 
@@ -139,7 +144,7 @@ class BaseParserTest(unittest.TestCase):
         self.patcher.stop()
 
     def file_block_for(self, data: str, filename: str, searched: str):
-        root_dir = get_abs_os_path('./dbt_modules/snowplow')
+        root_dir = get_abs_os_path('./dbt_packages/snowplow')
         filename = normalize(filename)
         path = FilePath(
             searched_path=searched,
@@ -327,15 +332,15 @@ class SchemaParserSourceTest(SchemaParserTest):
         tests.sort(key=lambda n: n.unique_id)
 
         self.assertEqual(tests[0].config.severity, 'ERROR')
-        self.assertEqual(tests[0].tags, ['schema'])
+        self.assertEqual(tests[0].tags, [])
         self.assertEqual(tests[0].sources, [['my_source', 'my_table']])
         self.assertEqual(tests[0].column_name, 'color')
-        self.assertEqual(tests[0].fqn, ['snowplow', 'schema_test', tests[0].name])
+        self.assertEqual(tests[0].fqn, ['snowplow', tests[0].name])
         self.assertEqual(tests[1].config.severity, 'WARN')
-        self.assertEqual(tests[1].tags, ['schema'])
+        self.assertEqual(tests[1].tags, [])
         self.assertEqual(tests[1].sources, [['my_source', 'my_table']])
         self.assertEqual(tests[1].column_name, 'color')
-        self.assertEqual(tests[1].fqn, ['snowplow', 'schema_test', tests[1].name])
+        self.assertEqual(tests[1].fqn, ['snowplow', tests[1].name])
 
         file_id = 'snowplow://' + normalize('models/test_one.yml')
         self.assertIn(file_id, self.parser.manifest.files)
@@ -409,12 +414,12 @@ class SchemaParserModelsTest(SchemaParserTest):
                 continue
             tests.append(node)
         self.assertEqual(tests[0].config.severity, 'ERROR')
-        self.assertEqual(tests[0].tags, ['schema'])
+        self.assertEqual(tests[0].tags, [])
         self.assertEqual(tests[0].refs, [['my_model']])
         self.assertEqual(tests[0].column_name, 'color')
         self.assertEqual(tests[0].package_name, 'snowplow')
         self.assertTrue(tests[0].name.startswith('accepted_values_'))
-        self.assertEqual(tests[0].fqn, ['snowplow', 'schema_test', tests[0].name])
+        self.assertEqual(tests[0].fqn, ['snowplow', tests[0].name])
         self.assertEqual(tests[0].unique_id.split('.'), ['test', 'snowplow', tests[0].name, '9d4814efde'])
         self.assertEqual(tests[0].test_metadata.name, 'accepted_values')
         self.assertIsNone(tests[0].test_metadata.namespace)
@@ -430,11 +435,11 @@ class SchemaParserModelsTest(SchemaParserTest):
         # foreign packages are a bit weird, they include the macro package
         # name in the test name
         self.assertEqual(tests[1].config.severity, 'ERROR')
-        self.assertEqual(tests[1].tags, ['schema'])
+        self.assertEqual(tests[1].tags, [])
         self.assertEqual(tests[1].refs, [['my_model']])
         self.assertEqual(tests[1].column_name, 'color')
         self.assertEqual(tests[1].column_name, 'color')
-        self.assertEqual(tests[1].fqn, ['snowplow', 'schema_test', tests[1].name])
+        self.assertEqual(tests[1].fqn, ['snowplow', tests[1].name])
         self.assertTrue(tests[1].name.startswith('foreign_package_test_case_'))
         self.assertEqual(tests[1].package_name, 'snowplow')
         self.assertEqual(tests[1].unique_id.split('.'), ['test', 'snowplow', tests[1].name, '13958f62f7'])
@@ -450,12 +455,12 @@ class SchemaParserModelsTest(SchemaParserTest):
         )
 
         self.assertEqual(tests[2].config.severity, 'WARN')
-        self.assertEqual(tests[2].tags, ['schema'])
+        self.assertEqual(tests[2].tags, [])
         self.assertEqual(tests[2].refs, [['my_model']])
         self.assertEqual(tests[2].column_name, 'color')
         self.assertEqual(tests[2].package_name, 'snowplow')
         self.assertTrue(tests[2].name.startswith('not_null_'))
-        self.assertEqual(tests[2].fqn, ['snowplow', 'schema_test', tests[2].name])
+        self.assertEqual(tests[2].fqn, ['snowplow', tests[2].name])
         self.assertEqual(tests[2].unique_id.split('.'), ['test', 'snowplow', tests[2].name, '2f61818750'])
         self.assertEqual(tests[2].test_metadata.name, 'not_null')
         self.assertIsNone(tests[2].test_metadata.namespace)
@@ -503,7 +508,7 @@ class ModelParserTest(BaseParserTest):
             fqn=['snowplow', 'nested', 'model_1'],
             package_name='snowplow',
             original_file_path=normalize('models/nested/model_1.sql'),
-            root_path=get_abs_os_path('./dbt_modules/snowplow'),
+            root_path=get_abs_os_path('./dbt_packages/snowplow'),
             config=NodeConfig(materialized='table'),
             path=normalize('nested/model_1.sql'),
             raw_sql=raw_sql,
@@ -544,7 +549,7 @@ class StaticModelParserTest(BaseParserTest):
             unique_id=macro_unique_id,
             package_name='root',
             original_file_path=normalize('macros/macro.sql'),
-            root_path=get_abs_os_path('./dbt_modules/root'),
+            root_path=get_abs_os_path('./dbt_packages/root'),
             path=normalize('macros/macro.sql'),
             macro_sql='{% macro ref(model_name) %}{% set x = raise("boom") %}{% endmacro %}',
         )
@@ -561,7 +566,7 @@ class StaticModelParserTest(BaseParserTest):
             fqn=['snowplow', 'nested', 'model_1'],
             package_name='snowplow',
             original_file_path=normalize('models/nested/model_1.sql'),
-            root_path=get_abs_os_path('./dbt_modules/snowplow'),
+            root_path=get_abs_os_path('./dbt_packages/snowplow'),
             config=NodeConfig(materialized='table'),
             path=normalize('nested/model_1.sql'),
             raw_sql=raw_sql,
@@ -570,6 +575,167 @@ class StaticModelParserTest(BaseParserTest):
         )
 
         assert(self.parser._has_banned_macro(node))
+
+# TODO 
+class StaticModelParserUnitTest(BaseParserTest):
+    # _get_config_call_dict
+    # _shift_sources
+    # _get_exp_sample_result
+    # _get_stable_sample_result
+    # _get_sample_result
+
+    def setUp(self):
+        super().setUp()
+        self.parser = ModelParser(
+            project=self.snowplow_project_config,
+            manifest=self.manifest,
+            root_project=self.root_project_config,
+        )
+        self.example_node = ParsedModelNode(
+            alias='model_1',
+            name='model_1',
+            database='test',
+            schema='analytics',
+            resource_type=NodeType.Model,
+            unique_id='model.snowplow.model_1',
+            fqn=['snowplow', 'nested', 'model_1'],
+            package_name='snowplow',
+            original_file_path=normalize('models/nested/model_1.sql'),
+            root_path=get_abs_os_path('./dbt_packages/snowplow'),
+            config=NodeConfig(materialized='table'),
+            path=normalize('nested/model_1.sql'),
+            raw_sql='{{ config(materialized="table") }}select 1 as id',
+            checksum=None,
+            unrendered_config={'materialized': 'table'},
+        )
+        self.example_config = ContextConfig(
+            self.root_project_config,
+            self.example_node.fqn,
+            self.example_node.resource_type,
+            self.snowplow_project_config,
+        )
+
+    def file_block_for(self, data, filename):
+        return super().file_block_for(data, filename, 'models')
+
+    # tests that configs get extracted properly. the function should respect merge behavior,
+    # but becuase it's only reading from one dictionary it won't matter except in edge cases
+    # like this example with tags changing type to a list.
+    def test_config_shifting(self):
+        static_parser_result = {
+            'configs': [
+                ('hello', 'world'),
+                ('flag', True),
+                ('tags', 'tag1'),
+                ('tags', 'tag2')
+            ]
+        }
+        expected = {
+            'hello': 'world',
+            'flag': True,
+            'tags': ['tag1', 'tag2']
+        }
+        got = _get_config_call_dict(static_parser_result)
+        self.assertEqual(expected, got)
+
+    def test_source_shifting(self):
+        static_parser_result = {
+            'sources': [('abc', 'def'), ('x', 'y')]
+        }
+        expected = {
+            'sources': [['abc', 'def'], ['x', 'y']]
+        }
+        got = _shift_sources(static_parser_result)
+        self.assertEqual(expected, got)
+
+    def test_sample_results(self):
+        # --- missed ref --- #
+        node = deepcopy(self.example_node)
+        config = deepcopy(self.example_config)
+        sample_node = deepcopy(self.example_node)
+        sample_config = deepcopy(self.example_config)
+
+        sample_node.refs = []
+        node.refs = ['myref']
+
+        result = _get_sample_result(sample_node, sample_config, node, config)
+        self.assertEqual([(7, "missed_ref_value")], result)
+
+        # --- false positive ref --- #
+        node = deepcopy(self.example_node)
+        config = deepcopy(self.example_config)
+        sample_node = deepcopy(self.example_node)
+        sample_config = deepcopy(self.example_config)
+
+        sample_node.refs = ['myref']
+        node.refs = []
+
+        result = _get_sample_result(sample_node, sample_config, node, config)
+        self.assertEqual([(6, "false_positive_ref_value")], result)
+
+        # --- missed source --- #
+        node = deepcopy(self.example_node)
+        config = deepcopy(self.example_config)
+        sample_node = deepcopy(self.example_node)
+        sample_config = deepcopy(self.example_config)
+
+        sample_node.sources = []
+        node.sources = [['abc', 'def']]
+
+        result = _get_sample_result(sample_node, sample_config, node, config)
+        self.assertEqual([(5, 'missed_source_value')], result)
+
+        # --- false positive source --- #
+        node = deepcopy(self.example_node)
+        config = deepcopy(self.example_config)
+        sample_node = deepcopy(self.example_node)
+        sample_config = deepcopy(self.example_config)
+
+        sample_node.sources = [['abc', 'def']]
+        node.sources = []
+
+        result = _get_sample_result(sample_node, sample_config, node, config)
+        self.assertEqual([(4, 'false_positive_source_value')], result)
+
+        # --- missed config --- #
+        node = deepcopy(self.example_node)
+        config = deepcopy(self.example_config)
+        sample_node = deepcopy(self.example_node)
+        sample_config = deepcopy(self.example_config)
+
+        sample_config._config_call_dict = {}
+        config._config_call_dict = {'key': 'value'}
+
+        result = _get_sample_result(sample_node, sample_config, node, config)
+        self.assertEqual([(3, 'missed_config_value')], result)
+
+        # --- false positive config --- #
+        node = deepcopy(self.example_node)
+        config = deepcopy(self.example_config)
+        sample_node = deepcopy(self.example_node)
+        sample_config = deepcopy(self.example_config)
+
+        sample_config._config_call_dict = {'key': 'value'}
+        config._config_call_dict = {}
+
+        result = _get_sample_result(sample_node, sample_config, node, config)
+        self.assertEqual([(2, "false_positive_config_value")], result)
+
+    def test_exp_sample_results(self):
+        node = deepcopy(self.example_node)
+        config = deepcopy(self.example_config)
+        sample_node = deepcopy(self.example_node)
+        sample_config = deepcopy(self.example_config)
+        result = _get_exp_sample_result(sample_node, sample_config, node, config)
+        self.assertEqual(["00_experimental_exact_match"], result)
+
+    def test_stable_sample_results(self):
+        node = deepcopy(self.example_node)
+        config = deepcopy(self.example_config)
+        sample_node = deepcopy(self.example_node)
+        sample_config = deepcopy(self.example_config)
+        result = _get_stable_sample_result(sample_node, sample_config, node, config)
+        self.assertEqual(["80_stable_exact_match"], result)
 
 
 class SnapshotParserTest(BaseParserTest):
@@ -615,7 +781,7 @@ class SnapshotParserTest(BaseParserTest):
             fqn=['snowplow', 'nested', 'snap_1', 'foo'],
             package_name='snowplow',
             original_file_path=normalize('snapshots/nested/snap_1.sql'),
-            root_path=get_abs_os_path('./dbt_modules/snowplow'),
+            root_path=get_abs_os_path('./dbt_packages/snowplow'),
             config=SnapshotConfig(
                 strategy='timestamp',
                 updated_at='last_update',
@@ -676,7 +842,7 @@ class SnapshotParserTest(BaseParserTest):
             fqn=['snowplow', 'nested', 'snap_1', 'foo'],
             package_name='snowplow',
             original_file_path=normalize('snapshots/nested/snap_1.sql'),
-            root_path=get_abs_os_path('./dbt_modules/snowplow'),
+            root_path=get_abs_os_path('./dbt_packages/snowplow'),
             config=SnapshotConfig(
                 strategy='timestamp',
                 updated_at='last_update',
@@ -706,7 +872,7 @@ class SnapshotParserTest(BaseParserTest):
             fqn=['snowplow', 'nested', 'snap_1', 'bar'],
             package_name='snowplow',
             original_file_path=normalize('snapshots/nested/snap_1.sql'),
-            root_path=get_abs_os_path('./dbt_modules/snowplow'),
+            root_path=get_abs_os_path('./dbt_packages/snowplow'),
             config=SnapshotConfig(
                 strategy='timestamp',
                 updated_at='last_update',
@@ -758,7 +924,7 @@ class MacroParserTest(BaseParserTest):
             unique_id='macro.snowplow.foo',
             package_name='snowplow',
             original_file_path=normalize('macros/macro.sql'),
-            root_path=get_abs_os_path('./dbt_modules/snowplow'),
+            root_path=get_abs_os_path('./dbt_packages/snowplow'),
             path=normalize('macros/macro.sql'),
             macro_sql=raw_sql,
         )
@@ -781,7 +947,7 @@ class MacroParserTest(BaseParserTest):
             unique_id='macro.snowplow.bar',
             package_name='snowplow',
             original_file_path=normalize('macros/macro.sql'),
-            root_path=get_abs_os_path('./dbt_modules/snowplow'),
+            root_path=get_abs_os_path('./dbt_packages/snowplow'),
             path=normalize('macros/macro.sql'),
             macro_sql='{% macro bar(c, d) %}c + d{% endmacro %}',
         )
@@ -791,7 +957,7 @@ class MacroParserTest(BaseParserTest):
             unique_id='macro.snowplow.foo',
             package_name='snowplow',
             original_file_path=normalize('macros/macro.sql'),
-            root_path=get_abs_os_path('./dbt_modules/snowplow'),
+            root_path=get_abs_os_path('./dbt_packages/snowplow'),
             path=normalize('macros/macro.sql'),
             macro_sql='{% macro foo(a, b) %}a ~ b{% endmacro %}',
         )
@@ -805,10 +971,10 @@ class MacroParserTest(BaseParserTest):
         )
 
 
-class DataTestParserTest(BaseParserTest):
+class SingularTestParserTest(BaseParserTest):
     def setUp(self):
         super().setUp()
-        self.parser = DataTestParser(
+        self.parser = SingularTestParser(
             project=self.snowplow_project_config,
             manifest=self.manifest,
             root_project=self.root_project_config,
@@ -824,21 +990,21 @@ class DataTestParserTest(BaseParserTest):
         self.parser.parse_file(block)
         self.assert_has_manifest_lengths(self.parser.manifest, nodes=1)
         node = list(self.parser.manifest.nodes.values())[0]
-        expected = ParsedDataTestNode(
+        expected = ParsedSingularTestNode(
             alias='test_1',
             name='test_1',
             database='test',
             schema='dbt_test__audit',
             resource_type=NodeType.Test,
             unique_id='test.snowplow.test_1',
-            fqn=['snowplow', 'data_test', 'test_1'],
+            fqn=['snowplow', 'test_1'],
             package_name='snowplow',
             original_file_path=normalize('tests/test_1.sql'),
-            root_path=get_abs_os_path('./dbt_modules/snowplow'),
+            root_path=get_abs_os_path('./dbt_packages/snowplow'),
             refs=[['blah']],
             config=TestConfig(severity='ERROR'),
-            tags=['data'],
-            path=normalize('data_test/test_1.sql'),
+            tags=[],
+            path=normalize('test_1.sql'),
             raw_sql=raw_sql,
             checksum=block.file.checksum,
             unrendered_config={},
@@ -847,6 +1013,40 @@ class DataTestParserTest(BaseParserTest):
         file_id = 'snowplow://' + normalize('tests/test_1.sql')
         self.assertIn(file_id, self.parser.manifest.files)
         self.assertEqual(self.parser.manifest.files[file_id].nodes, ['test.snowplow.test_1'])
+
+
+class GenericTestParserTest(BaseParserTest):
+# generic tests in the test-paths directory currently leverage the macro parser 
+    def setUp(self):
+        super().setUp()
+        self.parser = GenericTestParser(
+            project=self.snowplow_project_config,
+            manifest=Manifest()
+        )
+
+    def file_block_for(self, data, filename):
+        return super().file_block_for(data, filename, 'tests/generic')
+
+    def test_basic(self):
+        raw_sql = '{% test not_null(model, column_name) %}select * from {{ model }} where {{ column_name }} is null {% endtest %}'
+        block = self.file_block_for(raw_sql, 'test_1.sql')
+        self.parser.manifest.files[block.file.file_id] = block.file
+        self.parser.parse_file(block)
+        node = list(self.parser.manifest.macros.values())[0]
+        expected = ParsedMacro(
+            name='test_not_null',
+            resource_type=NodeType.Macro,
+            unique_id='macro.snowplow.test_not_null',
+            package_name='snowplow',
+            original_file_path=normalize('tests/generic/test_1.sql'),
+            root_path=get_abs_os_path('./dbt_packages/snowplow'),
+            path=normalize('tests/generic/test_1.sql'),
+            macro_sql=raw_sql,
+        )
+        assertEqualNodes(node, expected)
+        file_id = 'snowplow://' + normalize('tests/generic/test_1.sql')
+        self.assertIn(file_id, self.parser.manifest.files)
+        self.assertEqual(self.parser.manifest.files[file_id].macros, ['macro.snowplow.test_not_null'])
 
 
 class AnalysisParserTest(BaseParserTest):
@@ -878,7 +1078,7 @@ class AnalysisParserTest(BaseParserTest):
             fqn=['snowplow', 'analysis', 'nested', 'analysis_1'],
             package_name='snowplow',
             original_file_path=normalize('analyses/nested/analysis_1.sql'),
-            root_path=get_abs_os_path('./dbt_modules/snowplow'),
+            root_path=get_abs_os_path('./dbt_packages/snowplow'),
             depends_on=DependsOn(),
             config=NodeConfig(),
             path=normalize('analysis/nested/analysis_1.sql'),

@@ -5,7 +5,7 @@ from typing import NoReturn, Optional, Mapping, Any
 from dbt.logger import GLOBAL_LOGGER as logger
 from dbt.node_types import NodeType
 from dbt import flags
-from dbt.ui import line_wrap_message
+from dbt.ui import line_wrap_message, warning_tag
 
 import dbt.dataclass_schema
 
@@ -466,6 +466,15 @@ def invalid_type_error(method_name, arg_name, got_value, expected_type,
                          got_value=got_value, got_type=got_type))
 
 
+def invalid_bool_error(got_value, macro_name) -> NoReturn:
+    """Raise a CompilationException when an macro expects a boolean but gets some
+    other value.
+    """
+    msg = ("Macro '{macro_name}' returns '{got_value}'.  It is not type 'bool' "
+           "and cannot not be converted reliably to a bool.")
+    raise_compiler_error(msg.format(macro_name=macro_name, got_value=got_value))
+
+
 def ref_invalid_args(model, args) -> NoReturn:
     raise_compiler_error(
         "ref() takes at most two arguments ({} given)".format(len(args)),
@@ -606,14 +615,6 @@ def source_target_not_found(
     raise_compiler_error(msg, model)
 
 
-def ref_disabled_dependency(model, target_model):
-    raise_compiler_error(
-        "Model '{}' depends on model '{}' which is disabled in "
-        "the project config".format(model.unique_id,
-                                    target_model.unique_id),
-        model)
-
-
 def dependency_not_found(model, target_model_name):
     raise_compiler_error(
         "'{}' depends on '{}' which is not in the graph!"
@@ -626,6 +627,20 @@ def macro_not_found(model, target_macro_id):
         model,
         "'{}' references macro '{}' which is not defined!"
         .format(model.unique_id, target_macro_id))
+
+
+def macro_invalid_dispatch_arg(macro_name) -> NoReturn:
+    msg = '''\
+    The "packages" argument of adapter.dispatch() has been deprecated.
+    Use the "macro_namespace" argument instead.
+
+    Raised during dispatch for: {}
+
+    For more information, see:
+
+    https://docs.getdbt.com/reference/dbt-jinja-functions/dispatch
+    '''
+    raise_compiler_error(msg.format(macro_name))
 
 
 def materialization_not_available(model, adapter_type):
@@ -674,6 +689,14 @@ def missing_relation(relation, model=None):
         model)
 
 
+def raise_dataclass_not_dict(obj):
+    msg = (
+        'The object ("{obj}") was used as a dictionary. This '
+        'capability has been removed from objects of this type.'
+    )
+    raise_compiler_error(msg)
+
+
 def relation_wrong_type(relation, expected_type, model=None):
     raise_compiler_error(
         ('Trying to create {expected_type} {relation}, '
@@ -710,7 +733,7 @@ def system_error(operation_name):
     raise_compiler_error(
         "dbt encountered an error when attempting to {}. "
         "If this error persists, please create an issue at: \n\n"
-        "https://github.com/dbt-labs/dbt"
+        "https://github.com/dbt-labs/dbt-core"
         .format(operation_name))
 
 
@@ -916,22 +939,17 @@ def raise_unrecognized_credentials_type(typename, supported_types):
     )
 
 
-def raise_invalid_patch(
-    node, patch_section: str, patch_path: str,
-) -> NoReturn:
+def warn_invalid_patch(patch, resource_type):
     msg = line_wrap_message(
         f'''\
-        '{node.name}' is a {node.resource_type} node, but it is
-        specified in the {patch_section} section of
-        {patch_path}.
-
-
-
-        To fix this error, place the `{node.name}`
-        specification under the {node.resource_type.pluralize()} key instead.
+        '{patch.name}' is a {resource_type} node, but it is
+        specified in the {patch.yaml_key} section of
+        {patch.original_file_path}.
+        To fix this error, place the `{patch.name}`
+        specification under the {resource_type.pluralize()} key instead.
         '''
     )
-    raise_compiler_error(msg, node)
+    warn_or_error(msg, log_fmt=warning_tag('{}'))
 
 
 def raise_not_implemented(msg):
@@ -993,6 +1011,7 @@ CONTEXT_EXPORTS = {
         raise_ambiguous_alias,
         raise_ambiguous_catalog_match,
         raise_cache_inconsistent,
+        raise_dataclass_not_dict,
         raise_compiler_error,
         raise_database_error,
         raise_dep_not_found,
