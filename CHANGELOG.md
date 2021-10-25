@@ -30,6 +30,7 @@ Contributors:
 - [@rvacaru](https://github.com/rvacaru) ([#3908](https://github.com/dbt-labs/dbt/pull/3908))
 - [@JCZuurmond](https://github.com/jczuurmond) ([#4114](https://github.com/dbt-labs/dbt-core/pull/4114))
 - [@ljhopkins2](https://github.com/dbt-labs/dbt-core/pull/4079)
+- [@kadero](https://github.com/kadero) ([3955](https://github.com/dbt-labs/dbt-core/pull/3955))
 
 ## dbt-core 1.0.0b1 (October 11, 2021)
 
@@ -71,8 +72,8 @@ Contributors:
 
 Contributors:
 
-- [@kadero](https://github.com/kadero) ([3955](https://github.com/dbt-labs/dbt-core/pull/3955), [#3952](https://github.com/dbt-labs/dbt-core/pull/3953))
 - [@dave-connors-3](https://github.com/dave-connors-3) ([#3920](https://github.com/dbt-labs/dbt-core/pull/3922))
+- [@kadero](https://github.com/kadero) ([#3952](https://github.com/dbt-labs/dbt-core/pull/3953))
 - [@samlader](https://github.com/samlader) ([#3993](https://github.com/dbt-labs/dbt-core/pull/3993))
 - [@yu-iskw](https://github.com/yu-iskw) ([#3967](https://github.com/dbt-labs/dbt-core/pull/3967))
 - [@laxjesse](https://github.com/laxjesse) ([#4019](https://github.com/dbt-labs/dbt-core/pull/4019))
