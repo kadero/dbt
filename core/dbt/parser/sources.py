@@ -345,6 +345,8 @@ def merge_freshness_time_thresholds(
 ) -> Optional[Time]:
     if base and update:
         return base.merged(update)
+    elif update is None:
+        return None
     else:
         return update or base
 
