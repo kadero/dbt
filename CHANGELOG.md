@@ -1,5 +1,11 @@
 ## dbt-core 1.0.0 (Release TBD)
 
+### Features
+- Allow nullable `error_after` in source freshness ([#3874](https://github.com/dbt-labs/dbt-core/issues/3874), [#3955](https://github.com/dbt-labs/dbt-core/pull/3955))
+
+Contributors:
+- [@kadero](https://github.com/kadero) ([3955](https://github.com/dbt-labs/dbt-core/pull/3955))
+
 ## dbt-core 1.0.0b2 (October 25, 2021)
 
 ### Breaking changes
@@ -13,7 +19,6 @@
 - Turn on partial parsing by default ([#3867](https://github.com/dbt-labs/dbt/issues/3867), [#3989](https://github.com/dbt-labs/dbt/issues/3989))
 - Add `result:<status>` selectors to automatically rerun failed tests and erroneous models. This makes it easier to rerun failed dbt jobs with a simple selector flag instead of restarting from the beginning or manually running the dbt models in scope. ([#3859](https://github.com/dbt-labs/dbt/issues/3891), [#4017](https://github.com/dbt-labs/dbt/pull/4017))
 - `dbt init` is now interactive, generating profiles.yml when run inside existing project ([#3625](https://github.com/dbt-labs/dbt/pull/3625))
-- Allow nullable error_after in source freshness ([#3874](https://github.com/dbt-labs/dbt-core/issues/3874), [3955](https://github.com/dbt-labs/dbt-core/pull/3955))
 
 ### Under the hood
 - Fix intermittent errors in partial parsing tests ([#4060](https://github.com/dbt-labs/dbt-core/issues/4060), [#4068](https://github.com/dbt-labs/dbt-core/pull/4068))
@@ -30,7 +35,6 @@ Contributors:
 - [@rvacaru](https://github.com/rvacaru) ([#3908](https://github.com/dbt-labs/dbt/pull/3908))
 - [@JCZuurmond](https://github.com/jczuurmond) ([#4114](https://github.com/dbt-labs/dbt-core/pull/4114))
 - [@ljhopkins2](https://github.com/dbt-labs/dbt-core/pull/4079)
-- [@kadero](https://github.com/kadero) ([3955](https://github.com/dbt-labs/dbt-core/pull/3955))
 
 ## dbt-core 1.0.0b1 (October 11, 2021)
 
