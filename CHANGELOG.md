@@ -10,8 +10,8 @@
 - Increase performance of graph subset selection ([#4135](https://github.com/dbt-labs/dbt-core/issues/4135),[#4155](https://github.com/dbt-labs/dbt-core/pull/4155))
 - Speed up node selection by skipping indirect node incorporation when not needed ([#4213](https://github.com/dbt-labs/dbt-core/issues/4213),[#4214](https://github.com/dbt-labs/dbt-core/pull/4214))
 - Add metrics nodes ([#4071](https://github.com/dbt-labs/dbt-core/issues/4071), [#4235](https://github.com/dbt-labs/dbt-core/pull/4235))
-- Add support for `dbt init <project_name>` ([4156](https://github.com/dbt-labs/dbt-core/issues/4156), [4249](https://github.com/dbt-labs/dbt-core/pull/4249))
-- Support of `skip_profile_setup` argument for `dbt init` (`dbt init -s`) ([4156](https://github.com/dbt-labs/dbt-core/issues/4156), [4249](https://github.com/dbt-labs/dbt-core/pull/4249))
+- Add support for `dbt init <project_name>` ([#4156](https://github.com/dbt-labs/dbt-core/issues/4156), [#4249](https://github.com/dbt-labs/dbt-core/pull/4249))
+- Support of `skip_profile_setup` argument for `dbt init` (`dbt init -s`) ([#4156](https://github.com/dbt-labs/dbt-core/issues/4156), [#4249](https://github.com/dbt-labs/dbt-core/pull/4249))
 
 ### Fixes
 - Changes unit tests using `assertRaisesRegexp` to `assertRaisesRegex` ([#4136](https://github.com/dbt-labs/dbt-core/issues/4132), [#4136](https://github.com/dbt-labs/dbt-core/pull/4136))
@@ -32,8 +32,7 @@
 - Remove official support for python 3.6, which is reaching end of life on December 23, 2021 ([#4134](https://github.com/dbt-labs/dbt-core/issues/4134), [#4223](https://github.com/dbt-labs/dbt-core/pull/4223))
 
 Contributors:
-<<<<<<< HEAD
-- [@kadero](https://github.com/kadero) ([#3955](https://github.com/dbt-labs/dbt-core/pull/3955))
+- [@kadero](https://github.com/kadero) ([#3955](https://github.com/dbt-labs/dbt-core/pull/3955), [#4249](https://github.com/dbt-labs/dbt-core/pull/4249))
 - [@frankcash](https://github.com/frankcash) ([#4136](https://github.com/dbt-labs/dbt-core/pull/4136))
 - [@Kayrnt](https://github.com/Kayrnt) ([#4136](https://github.com/dbt-labs/dbt-core/pull/4170))
 - [@VersusFacit](https://github.com/VersusFacit) ([#4104](https://github.com/dbt-labs/dbt-core/pull/4104))
@@ -42,10 +41,6 @@ Contributors:
 - [@salmonsd](https://github.com/salmonsd) ([docs#218](https://github.com/dbt-labs/dbt-docs/pull/218))
 - [@miike](https://github.com/miike) ([docs#203](https://github.com/dbt-labs/dbt-docs/pull/203))
 
-=======
-- [@kadero](https://github.com/kadero) ([3955](https://github.com/dbt-labs/dbt-core/pull/3955), [4249](https://github.com/dbt-labs/dbt-core/pull/4249))
-- [@frankcash](https://github.com/frankcash) ([4136](https://github.com/dbt-labs/dbt-core/pull/4136)
->>>>>>> Update changelog.md
 
 ## dbt-core 1.0.0b2 (October 25, 2021)
 
