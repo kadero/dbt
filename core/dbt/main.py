@@ -347,7 +347,7 @@ def _build_init_subparser(subparsers, base_subparser):
         'project_name',
         nargs='?',
         help='''
-        Name of the new DBT new project.
+        Name of the new DBT project.
         '''
     )
     sub.add_argument(
