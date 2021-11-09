@@ -295,28 +295,36 @@ class InitTask(BaseTask):
             self.create_profile_from_target(
                 adapter, profile_name=profile_name
             )
-        else:
-            # When dbt init is run outside of an existing project,
-            # create a new project and set up the user's profile.
+            return
+
+        # When dbt init is run outside of an existing project,
+        # create a new project and set up the user's profile.
+        project_name = self.args.project_name
+        if project_name is None:
+            # If project name is not provided,
+            # ask the user which project name they'd like to use.
             project_name = click.prompt("What is the desired project name?")
-            project_path = Path(project_name)
-            if project_path.exists():
-                logger.info(
-                    f"A project called {project_name} already exists here."
-                )
-                return
 
-            self.copy_starter_repo(project_name)
-            os.chdir(project_name)
-            with open("dbt_project.yml", "r+") as f:
-                content = f"{f.read()}".format(
-                    project_name=project_name,
-                    profile_name=project_name
-                )
-                f.seek(0)
-                f.write(content)
-                f.truncate()
+        project_path = Path(project_name)
+        if project_path.exists():
+            logger.info(
+                f"A project called {project_name} already exists here."
+            )
+            return
 
+        self.copy_starter_repo(project_name)
+        os.chdir(project_name)
+        with open("dbt_project.yml", "r+") as f:
+            content = f"{f.read()}".format(
+                project_name=project_name,
+                profile_name=project_name
+            )
+            f.seek(0)
+            f.write(content)
+            f.truncate()
+
+        # Ask for adapter only if skip_profile_setup flag is not provided.
+        if not self.args.skip_profile_setup:
             if not self.check_if_can_write_profile(profile_name=project_name):
                 return
             adapter = self.ask_for_adapter_choice()
