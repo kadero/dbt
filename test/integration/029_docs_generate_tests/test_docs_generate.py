@@ -2107,3 +2107,32 @@ class TestDocsGenerateLongWindowsPaths(DBTIntegrationTest):
         assert os.path.exists('./target/run/test/trivial_models/model.sql')
         self.run_dbt(['clean'])
         assert not os.path.exists('./target/run')
+
+
+class TestDocsGenerateDefer(DBTIntegrationTest):
+    @property
+    def schema(self):
+        return 'docs_generate_029'
+
+    @staticmethod
+    def dir(path):
+        return normalize(path)
+
+    @property
+    def models(self):
+        return self.dir("trivial_models")
+
+    def copy_state(self):
+        assert not os.path.exists('state')
+        os.makedirs('state')
+        shutil.copyfile('target/manifest.json', 'state/manifest.json')
+
+    @use_profile('postgres')
+    def test_postgres_generate_defer(self):
+        self.assertEqual(len(self.run_dbt(['run'])), 1)
+
+        # copy state files
+        self.copy_state()
+
+        # defer test, it succeeds
+        results = self.run_dbt(['docs', 'generate', '--state', 'state', '--defer'])
