@@ -207,6 +207,8 @@ def assert_to_dict(obj, dct):
         obj_to_dict['created_at'] = 1
     if 'created_at' in dct:
         dct['created_at'] = 1
+    if obj_to_dict != dct:
+        compare_dicts(obj_to_dict, dct)
     assert obj_to_dict == dct
 
 
@@ -255,7 +257,7 @@ class TestAdapterConversions(TestCase):
             return agate.TimeDelta()
 
         for instance in agate_helper.DEFAULT_TYPE_TESTER._possible_types:
-            if type(instance) is column_type:
+            if isinstance(instance, column_type):  # include child types
                 return instance
 
         raise ValueError(f'no tester for {column_type}')

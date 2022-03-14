@@ -3,23 +3,15 @@ from typing import List
 
 from dbt.dataclass_schema import ValidationError
 
-from dbt.contracts.graph.parsed import (
-    IntermediateSnapshotNode, ParsedSnapshotNode
-)
-from dbt.exceptions import (
-    ParsingException, validator_error_message
-)
+from dbt.contracts.graph.parsed import IntermediateSnapshotNode, ParsedSnapshotNode
+from dbt.exceptions import ParsingException, validator_error_message
 from dbt.node_types import NodeType
 from dbt.parser.base import SQLParser
-from dbt.parser.search import (
-    BlockContents, BlockSearcher, FileBlock
-)
+from dbt.parser.search import BlockContents, BlockSearcher, FileBlock
 from dbt.utils import split_path
 
 
-class SnapshotParser(
-    SQLParser[IntermediateSnapshotNode, ParsedSnapshotNode]
-):
+class SnapshotParser(SQLParser[IntermediateSnapshotNode, ParsedSnapshotNode]):
     def parse_from_dict(self, dct, validate=True) -> IntermediateSnapshotNode:
         if validate:
             IntermediateSnapshotNode.validate(dct)
@@ -63,8 +55,14 @@ class SnapshotParser(
 
     def transform(self, node: IntermediateSnapshotNode) -> ParsedSnapshotNode:
         try:
+            # The config_call_dict is not serialized, because normally
+            # it is not needed after parsing. But since the snapshot node
+            # does this extra to_dict, save and restore it, to keep
+            # the model config when there is also schema config.
+            config_call_dict = node.config_call_dict
             dct = node.to_dict(omit_none=True)
             parsed_node = ParsedSnapshotNode.from_dict(dct)
+            parsed_node.config_call_dict = config_call_dict
             self.set_snapshot_attributes(parsed_node)
             return parsed_node
         except ValidationError as exc:
@@ -73,7 +71,7 @@ class SnapshotParser(
     def parse_file(self, file_block: FileBlock) -> None:
         blocks = BlockSearcher(
             source=[file_block],
-            allowed_blocks={'snapshot'},
+            allowed_blocks={"snapshot"},
             source_tag_factory=BlockContents,
         )
         for block in blocks:

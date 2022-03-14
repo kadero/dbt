@@ -1,19 +1,13 @@
 from dataclasses import dataclass
-from .types import (
-    InfoLevel,
-    DebugLevel,
-    WarnLevel,
-    ErrorLevel,
-    ShowException,
-    Cli
-)
+from .types import InfoLevel, DebugLevel, WarnLevel, ErrorLevel, ShowException, NoFile
 
 
 # Keeping log messages for testing separate since they are used for debugging.
 # Reuse the existing messages when adding logs to tests.
 
+
 @dataclass
-class IntegrationTestInfo(InfoLevel, Cli):
+class IntegrationTestInfo(InfoLevel, NoFile):
     msg: str
     code: str = "T001"
 
@@ -22,7 +16,7 @@ class IntegrationTestInfo(InfoLevel, Cli):
 
 
 @dataclass
-class IntegrationTestDebug(DebugLevel, Cli):
+class IntegrationTestDebug(DebugLevel, NoFile):
     msg: str
     code: str = "T002"
 
@@ -31,7 +25,7 @@ class IntegrationTestDebug(DebugLevel, Cli):
 
 
 @dataclass
-class IntegrationTestWarn(WarnLevel, Cli):
+class IntegrationTestWarn(WarnLevel, NoFile):
     msg: str
     code: str = "T003"
 
@@ -40,7 +34,7 @@ class IntegrationTestWarn(WarnLevel, Cli):
 
 
 @dataclass
-class IntegrationTestError(ErrorLevel, Cli):
+class IntegrationTestError(ErrorLevel, NoFile):
     msg: str
     code: str = "T004"
 
@@ -49,7 +43,7 @@ class IntegrationTestError(ErrorLevel, Cli):
 
 
 @dataclass
-class IntegrationTestException(ShowException, ErrorLevel, Cli):
+class IntegrationTestException(ShowException, ErrorLevel, NoFile):
     msg: str
     code: str = "T005"
 
@@ -58,7 +52,7 @@ class IntegrationTestException(ShowException, ErrorLevel, Cli):
 
 
 @dataclass
-class UnitTestInfo(InfoLevel, Cli):
+class UnitTestInfo(InfoLevel, NoFile):
     msg: str
     code: str = "T006"
 
@@ -73,9 +67,9 @@ class UnitTestInfo(InfoLevel, Cli):
 #
 # TODO remove these lines once we run mypy everywhere.
 if 1 == 0:
-    IntegrationTestInfo(msg='')
-    IntegrationTestDebug(msg='')
-    IntegrationTestWarn(msg='')
-    IntegrationTestError(msg='')
-    IntegrationTestException(msg='')
-    UnitTestInfo(msg='')
+    IntegrationTestInfo(msg="")
+    IntegrationTestDebug(msg="")
+    IntegrationTestWarn(msg="")
+    IntegrationTestError(msg="")
+    IntegrationTestException(msg="")
+    UnitTestInfo(msg="")

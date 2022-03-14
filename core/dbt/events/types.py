@@ -1,18 +1,20 @@
-import argparse
 from dataclasses import dataclass
-from dbt.adapters.reference_keys import _make_key, _ReferenceKey
-from dbt.events.stubs import (
-    _CachedRelation,
-    BaseRelation,
-    ParsedHookNode,
-    ParsedModelNode,
-    RunResult
-)
+from dbt.adapters.reference_keys import _ReferenceKey
 from dbt import ui
+from dbt.helper_types import Lazy
 from dbt.events.base_types import (
-    Cli, Event, File, DebugLevel, InfoLevel, WarnLevel, ErrorLevel, ShowException, NodeInfo, Cache
+    Event,
+    NoFile,
+    DebugLevel,
+    InfoLevel,
+    WarnLevel,
+    ErrorLevel,
+    ShowException,
+    NodeInfo,
+    Cache,
 )
 from dbt.events.format import format_fancy_output_line, pluralize
+from dbt.events.serialization import EventSerialization
 from dbt.node_types import NodeType
 from typing import Any, Dict, List, Optional, Set, Tuple, TypeVar
 
@@ -25,7 +27,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple, TypeVar
 
 
 # Type representing Event and all subclasses of Event
-T_Event = TypeVar('T_Event', bound=Event)
+T_Event = TypeVar("T_Event", bound=Event)
 
 
 # Event codes have prefixes which follow this table
@@ -47,8 +49,9 @@ T_Event = TypeVar('T_Event', bound=Event)
 # TODO: remove ingore when this is fixed:
 # https://github.com/python/mypy/issues/5374
 
+
 @dataclass  # type: ignore
-class AdapterEventBase(Cli, File):
+class AdapterEventBase(EventSerialization, Event):
     name: str
     base_msg: str
     args: Tuple[Any, ...]
@@ -59,65 +62,56 @@ class AdapterEventBase(Cli, File):
 
     def message(self) -> str:
         # this class shouldn't be createable, but we can't make it an ABC because of a mypy bug
-        if type(self).__name__ == 'AdapterEventBase':
+        if type(self).__name__ == "AdapterEventBase":
             raise Exception(
-                'attempted to create a message for AdapterEventBase which cannot be created'
+                "attempted to create a message for AdapterEventBase which cannot be created"
             )
 
         # only apply formatting if there are arguments to format.
         # avoids issues like "dict: {k: v}".format() which results in `KeyError 'k'`
-        msg = (
-            self.base_msg
-            if len(self.args) == 0 else
-            self.base_msg.format(*self.args)
-        )
+        msg = self.base_msg if len(self.args) == 0 else self.base_msg.format(*self.args)
         return f"{self.name} adapter: {msg}"
 
 
 @dataclass
 class AdapterEventDebug(DebugLevel, AdapterEventBase, ShowException):
     code: str = "E001"
-    pass
 
 
 @dataclass
 class AdapterEventInfo(InfoLevel, AdapterEventBase, ShowException):
     code: str = "E002"
-    pass
 
 
 @dataclass
 class AdapterEventWarning(WarnLevel, AdapterEventBase, ShowException):
     code: str = "E003"
-    pass
 
 
 @dataclass
 class AdapterEventError(ErrorLevel, AdapterEventBase, ShowException):
     code: str = "E004"
-    pass
 
 
 @dataclass
-class MainKeyboardInterrupt(InfoLevel, Cli):
+class MainKeyboardInterrupt(InfoLevel, NoFile):
     code: str = "Z001"
 
     def message(self) -> str:
         return "ctrl-c"
 
 
-# will log to a file if the file logger is configured
 @dataclass
-class MainEncounteredError(ErrorLevel, Cli):
+class MainEncounteredError(ErrorLevel, NoFile):
     e: BaseException
     code: str = "Z002"
 
     def message(self) -> str:
-        return f"Encountered an error:\n{str(self.e)}"
+        return f"Encountered an error:\n{self.e}"
 
 
 @dataclass
-class MainStackTrace(DebugLevel, Cli):
+class MainStackTrace(DebugLevel, NoFile):
     stack_trace: str
     code: str = "Z003"
 
@@ -126,7 +120,7 @@ class MainStackTrace(DebugLevel, Cli):
 
 
 @dataclass
-class MainReportVersion(InfoLevel, Cli, File):
+class MainReportVersion(InfoLevel):
     v: str  # could be VersionSpecifier instead if we resolved some circular imports
     code: str = "A001"
 
@@ -135,20 +129,16 @@ class MainReportVersion(InfoLevel, Cli, File):
 
 
 @dataclass
-class MainReportArgs(DebugLevel, Cli, File):
-    args: argparse.Namespace
+class MainReportArgs(DebugLevel):
+    args: Dict[str, str]
     code: str = "A002"
 
     def message(self):
         return f"running dbt with arguments {str(self.args)}"
 
-    @classmethod
-    def asdict(cls, data: list) -> dict:
-        return dict((k, str(v)) for k, v in data)
-
 
 @dataclass
-class MainTrackingUserState(DebugLevel, Cli, File):
+class MainTrackingUserState(DebugLevel):
     user_state: str
     code: str = "A003"
 
@@ -157,7 +147,7 @@ class MainTrackingUserState(DebugLevel, Cli, File):
 
 
 @dataclass
-class ParsingStart(InfoLevel, Cli, File):
+class ParsingStart(InfoLevel):
     code: str = "I001"
 
     def message(self) -> str:
@@ -165,7 +155,7 @@ class ParsingStart(InfoLevel, Cli, File):
 
 
 @dataclass
-class ParsingCompiling(InfoLevel, Cli, File):
+class ParsingCompiling(InfoLevel):
     code: str = "I002"
 
     def message(self) -> str:
@@ -173,7 +163,7 @@ class ParsingCompiling(InfoLevel, Cli, File):
 
 
 @dataclass
-class ParsingWritingManifest(InfoLevel, Cli, File):
+class ParsingWritingManifest(InfoLevel):
     code: str = "I003"
 
     def message(self) -> str:
@@ -181,7 +171,7 @@ class ParsingWritingManifest(InfoLevel, Cli, File):
 
 
 @dataclass
-class ParsingDone(InfoLevel, Cli, File):
+class ParsingDone(InfoLevel):
     code: str = "I004"
 
     def message(self) -> str:
@@ -189,7 +179,7 @@ class ParsingDone(InfoLevel, Cli, File):
 
 
 @dataclass
-class ManifestDependenciesLoaded(InfoLevel, Cli, File):
+class ManifestDependenciesLoaded(InfoLevel):
     code: str = "I005"
 
     def message(self) -> str:
@@ -197,7 +187,7 @@ class ManifestDependenciesLoaded(InfoLevel, Cli, File):
 
 
 @dataclass
-class ManifestLoaderCreated(InfoLevel, Cli, File):
+class ManifestLoaderCreated(InfoLevel):
     code: str = "I006"
 
     def message(self) -> str:
@@ -205,7 +195,7 @@ class ManifestLoaderCreated(InfoLevel, Cli, File):
 
 
 @dataclass
-class ManifestLoaded(InfoLevel, Cli, File):
+class ManifestLoaded(InfoLevel):
     code: str = "I007"
 
     def message(self) -> str:
@@ -213,7 +203,7 @@ class ManifestLoaded(InfoLevel, Cli, File):
 
 
 @dataclass
-class ManifestChecked(InfoLevel, Cli, File):
+class ManifestChecked(InfoLevel):
     code: str = "I008"
 
     def message(self) -> str:
@@ -221,7 +211,7 @@ class ManifestChecked(InfoLevel, Cli, File):
 
 
 @dataclass
-class ManifestFlatGraphBuilt(InfoLevel, Cli, File):
+class ManifestFlatGraphBuilt(InfoLevel):
     code: str = "I009"
 
     def message(self) -> str:
@@ -229,7 +219,7 @@ class ManifestFlatGraphBuilt(InfoLevel, Cli, File):
 
 
 @dataclass
-class ReportPerformancePath(InfoLevel, Cli, File):
+class ReportPerformancePath(InfoLevel):
     path: str
     code: str = "I010"
 
@@ -238,7 +228,7 @@ class ReportPerformancePath(InfoLevel, Cli, File):
 
 
 @dataclass
-class GitSparseCheckoutSubdirectory(DebugLevel, Cli, File):
+class GitSparseCheckoutSubdirectory(DebugLevel):
     subdir: str
     code: str = "M001"
 
@@ -247,7 +237,7 @@ class GitSparseCheckoutSubdirectory(DebugLevel, Cli, File):
 
 
 @dataclass
-class GitProgressCheckoutRevision(DebugLevel, Cli, File):
+class GitProgressCheckoutRevision(DebugLevel):
     revision: str
     code: str = "M002"
 
@@ -256,7 +246,7 @@ class GitProgressCheckoutRevision(DebugLevel, Cli, File):
 
 
 @dataclass
-class GitProgressUpdatingExistingDependency(DebugLevel, Cli, File):
+class GitProgressUpdatingExistingDependency(DebugLevel):
     dir: str
     code: str = "M003"
 
@@ -265,7 +255,7 @@ class GitProgressUpdatingExistingDependency(DebugLevel, Cli, File):
 
 
 @dataclass
-class GitProgressPullingNewDependency(DebugLevel, Cli, File):
+class GitProgressPullingNewDependency(DebugLevel):
     dir: str
     code: str = "M004"
 
@@ -274,7 +264,7 @@ class GitProgressPullingNewDependency(DebugLevel, Cli, File):
 
 
 @dataclass
-class GitNothingToDo(DebugLevel, Cli, File):
+class GitNothingToDo(DebugLevel):
     sha: str
     code: str = "M005"
 
@@ -283,7 +273,7 @@ class GitNothingToDo(DebugLevel, Cli, File):
 
 
 @dataclass
-class GitProgressUpdatedCheckoutRange(DebugLevel, Cli, File):
+class GitProgressUpdatedCheckoutRange(DebugLevel):
     start_sha: str
     end_sha: str
     code: str = "M006"
@@ -293,7 +283,7 @@ class GitProgressUpdatedCheckoutRange(DebugLevel, Cli, File):
 
 
 @dataclass
-class GitProgressCheckedOutAt(DebugLevel, Cli, File):
+class GitProgressCheckedOutAt(DebugLevel):
     end_sha: str
     code: str = "M007"
 
@@ -302,7 +292,7 @@ class GitProgressCheckedOutAt(DebugLevel, Cli, File):
 
 
 @dataclass
-class RegistryProgressMakingGETRequest(DebugLevel, Cli, File):
+class RegistryProgressMakingGETRequest(DebugLevel):
     url: str
     code: str = "M008"
 
@@ -311,7 +301,7 @@ class RegistryProgressMakingGETRequest(DebugLevel, Cli, File):
 
 
 @dataclass
-class RegistryProgressGETResponse(DebugLevel, Cli, File):
+class RegistryProgressGETResponse(DebugLevel):
     url: str
     resp_code: int
     code: str = "M009"
@@ -322,7 +312,7 @@ class RegistryProgressGETResponse(DebugLevel, Cli, File):
 
 # TODO this was actually `logger.exception(...)` not `logger.error(...)`
 @dataclass
-class SystemErrorRetrievingModTime(ErrorLevel, Cli, File):
+class SystemErrorRetrievingModTime(ErrorLevel):
     path: str
     code: str = "Z004"
 
@@ -331,7 +321,7 @@ class SystemErrorRetrievingModTime(ErrorLevel, Cli, File):
 
 
 @dataclass
-class SystemCouldNotWrite(DebugLevel, Cli, File):
+class SystemCouldNotWrite(DebugLevel):
     path: str
     reason: str
     exc: Exception
@@ -345,7 +335,7 @@ class SystemCouldNotWrite(DebugLevel, Cli, File):
 
 
 @dataclass
-class SystemExecutingCmd(DebugLevel, Cli, File):
+class SystemExecutingCmd(DebugLevel):
     cmd: List[str]
     code: str = "Z006"
 
@@ -354,7 +344,7 @@ class SystemExecutingCmd(DebugLevel, Cli, File):
 
 
 @dataclass
-class SystemStdOutMsg(DebugLevel, Cli, File):
+class SystemStdOutMsg(DebugLevel):
     bmsg: bytes
     code: str = "Z007"
 
@@ -363,7 +353,7 @@ class SystemStdOutMsg(DebugLevel, Cli, File):
 
 
 @dataclass
-class SystemStdErrMsg(DebugLevel, Cli, File):
+class SystemStdErrMsg(DebugLevel):
     bmsg: bytes
     code: str = "Z008"
 
@@ -372,7 +362,7 @@ class SystemStdErrMsg(DebugLevel, Cli, File):
 
 
 @dataclass
-class SystemReportReturnCode(DebugLevel, Cli, File):
+class SystemReportReturnCode(DebugLevel):
     returncode: int
     code: str = "Z009"
 
@@ -381,22 +371,21 @@ class SystemReportReturnCode(DebugLevel, Cli, File):
 
 
 @dataclass
-class SelectorReportInvalidSelector(InfoLevel, Cli, File):
-    selector_methods: dict
+class SelectorReportInvalidSelector(InfoLevel):
+    valid_selectors: str
     spec_method: str
     raw_spec: str
     code: str = "M010"
 
     def message(self) -> str:
-        valid_selectors = ", ".join(self.selector_methods)
         return (
             f"The '{self.spec_method}' selector specified in {self.raw_spec} is "
-            f"invalid. Must be one of [{valid_selectors}]"
+            f"invalid. Must be one of [{self.valid_selectors}]"
         )
 
 
 @dataclass
-class MacroEventInfo(InfoLevel, Cli, File):
+class MacroEventInfo(InfoLevel):
     msg: str
     code: str = "M011"
 
@@ -405,7 +394,7 @@ class MacroEventInfo(InfoLevel, Cli, File):
 
 
 @dataclass
-class MacroEventDebug(DebugLevel, Cli, File):
+class MacroEventDebug(DebugLevel):
     msg: str
     code: str = "M012"
 
@@ -414,7 +403,7 @@ class MacroEventDebug(DebugLevel, Cli, File):
 
 
 @dataclass
-class NewConnection(DebugLevel, Cli, File):
+class NewConnection(DebugLevel):
     conn_type: str
     conn_name: str
     code: str = "E005"
@@ -424,7 +413,7 @@ class NewConnection(DebugLevel, Cli, File):
 
 
 @dataclass
-class ConnectionReused(DebugLevel, Cli, File):
+class ConnectionReused(DebugLevel):
     conn_name: str
     code: str = "E006"
 
@@ -433,7 +422,7 @@ class ConnectionReused(DebugLevel, Cli, File):
 
 
 @dataclass
-class ConnectionLeftOpen(DebugLevel, Cli, File):
+class ConnectionLeftOpen(DebugLevel):
     conn_name: Optional[str]
     code: str = "E007"
 
@@ -442,7 +431,7 @@ class ConnectionLeftOpen(DebugLevel, Cli, File):
 
 
 @dataclass
-class ConnectionClosed(DebugLevel, Cli, File):
+class ConnectionClosed(DebugLevel):
     conn_name: Optional[str]
     code: str = "E008"
 
@@ -451,7 +440,7 @@ class ConnectionClosed(DebugLevel, Cli, File):
 
 
 @dataclass
-class RollbackFailed(ShowException, DebugLevel, Cli, File):
+class RollbackFailed(ShowException, DebugLevel):
     conn_name: Optional[str]
     code: str = "E009"
 
@@ -461,7 +450,7 @@ class RollbackFailed(ShowException, DebugLevel, Cli, File):
 
 # TODO: can we combine this with ConnectionClosed?
 @dataclass
-class ConnectionClosed2(DebugLevel, Cli, File):
+class ConnectionClosed2(DebugLevel):
     conn_name: Optional[str]
     code: str = "E010"
 
@@ -471,7 +460,7 @@ class ConnectionClosed2(DebugLevel, Cli, File):
 
 # TODO: can we combine this with ConnectionLeftOpen?
 @dataclass
-class ConnectionLeftOpen2(DebugLevel, Cli, File):
+class ConnectionLeftOpen2(DebugLevel):
     conn_name: Optional[str]
     code: str = "E011"
 
@@ -480,7 +469,7 @@ class ConnectionLeftOpen2(DebugLevel, Cli, File):
 
 
 @dataclass
-class Rollback(DebugLevel, Cli, File):
+class Rollback(DebugLevel):
     conn_name: Optional[str]
     code: str = "E012"
 
@@ -489,7 +478,7 @@ class Rollback(DebugLevel, Cli, File):
 
 
 @dataclass
-class CacheMiss(DebugLevel, Cli, File):
+class CacheMiss(DebugLevel):
     conn_name: str
     database: Optional[str]
     schema: str
@@ -503,7 +492,7 @@ class CacheMiss(DebugLevel, Cli, File):
 
 
 @dataclass
-class ListRelations(DebugLevel, Cli, File):
+class ListRelations(DebugLevel):
     database: Optional[str]
     schema: str
     relations: List[_ReferenceKey]
@@ -512,17 +501,9 @@ class ListRelations(DebugLevel, Cli, File):
     def message(self) -> str:
         return f"with database={self.database}, schema={self.schema}, relations={self.relations}"
 
-    @classmethod
-    def asdict(cls, data: list) -> dict:
-        d = dict()
-        for k, v in data:
-            if type(v) == list:
-                d[k] = [str(x) for x in v]
-        return d
-
 
 @dataclass
-class ConnectionUsed(DebugLevel, Cli, File):
+class ConnectionUsed(DebugLevel):
     conn_type: str
     conn_name: Optional[str]
     code: str = "E015"
@@ -532,7 +513,7 @@ class ConnectionUsed(DebugLevel, Cli, File):
 
 
 @dataclass
-class SQLQuery(DebugLevel, Cli, File):
+class SQLQuery(DebugLevel):
     conn_name: Optional[str]
     sql: str
     code: str = "E016"
@@ -542,9 +523,9 @@ class SQLQuery(DebugLevel, Cli, File):
 
 
 @dataclass
-class SQLQueryStatus(DebugLevel, Cli, File):
+class SQLQueryStatus(DebugLevel):
     status: str
-    elapsed: float
+    elapsed: Optional[float]
     code: str = "E017"
 
     def message(self) -> str:
@@ -552,7 +533,7 @@ class SQLQueryStatus(DebugLevel, Cli, File):
 
 
 @dataclass
-class SQLCommit(DebugLevel, Cli, File):
+class SQLCommit(DebugLevel):
     conn_name: str
     code: str = "E018"
 
@@ -561,10 +542,10 @@ class SQLCommit(DebugLevel, Cli, File):
 
 
 @dataclass
-class ColTypeChange(DebugLevel, Cli, File):
+class ColTypeChange(DebugLevel):
     orig_type: str
     new_type: str
-    table: str
+    table: _ReferenceKey
     code: str = "E019"
 
     def message(self) -> str:
@@ -572,7 +553,7 @@ class ColTypeChange(DebugLevel, Cli, File):
 
 
 @dataclass
-class SchemaCreation(DebugLevel, Cli, File):
+class SchemaCreation(DebugLevel):
     relation: _ReferenceKey
     code: str = "E020"
 
@@ -581,22 +562,18 @@ class SchemaCreation(DebugLevel, Cli, File):
 
 
 @dataclass
-class SchemaDrop(DebugLevel, Cli, File):
+class SchemaDrop(DebugLevel):
     relation: _ReferenceKey
     code: str = "E021"
 
     def message(self) -> str:
         return f'Dropping schema "{self.relation}".'
 
-    @classmethod
-    def asdict(cls, data: list) -> dict:
-        return dict((k, str(v)) for k, v in data)
-
 
 # TODO pretty sure this is only ever called in dead code
 # see: core/dbt/adapters/cache.py _add_link vs add_link
 @dataclass
-class UncachedRelation(DebugLevel, Cli, File, Cache):
+class UncachedRelation(DebugLevel, Cache):
     dep_key: _ReferenceKey
     ref_key: _ReferenceKey
     code: str = "E022"
@@ -610,7 +587,7 @@ class UncachedRelation(DebugLevel, Cli, File, Cache):
 
 
 @dataclass
-class AddLink(DebugLevel, Cli, File, Cache):
+class AddLink(DebugLevel, Cache):
     dep_key: _ReferenceKey
     ref_key: _ReferenceKey
     code: str = "E023"
@@ -620,7 +597,7 @@ class AddLink(DebugLevel, Cli, File, Cache):
 
 
 @dataclass
-class AddRelation(DebugLevel, Cli, File, Cache):
+class AddRelation(DebugLevel, Cache):
     relation: _ReferenceKey
     code: str = "E024"
 
@@ -629,7 +606,7 @@ class AddRelation(DebugLevel, Cli, File, Cache):
 
 
 @dataclass
-class DropMissingRelation(DebugLevel, Cli, File, Cache):
+class DropMissingRelation(DebugLevel, Cache):
     relation: _ReferenceKey
     code: str = "E025"
 
@@ -638,7 +615,7 @@ class DropMissingRelation(DebugLevel, Cli, File, Cache):
 
 
 @dataclass
-class DropCascade(DebugLevel, Cli, File, Cache):
+class DropCascade(DebugLevel, Cache):
     dropped: _ReferenceKey
     consequences: Set[_ReferenceKey]
     code: str = "E026"
@@ -646,19 +623,9 @@ class DropCascade(DebugLevel, Cli, File, Cache):
     def message(self) -> str:
         return f"drop {self.dropped} is cascading to {self.consequences}"
 
-    @classmethod
-    def asdict(cls, data: list) -> dict:
-        d = dict()
-        for k, v in data:
-            if isinstance(v, list):
-                d[k] = [str(x) for x in v]
-            else:
-                d[k] = str(v)  # type: ignore
-        return d
-
 
 @dataclass
-class DropRelation(DebugLevel, Cli, File, Cache):
+class DropRelation(DebugLevel, Cache):
     dropped: _ReferenceKey
     code: str = "E027"
 
@@ -667,19 +634,21 @@ class DropRelation(DebugLevel, Cli, File, Cache):
 
 
 @dataclass
-class UpdateReference(DebugLevel, Cli, File, Cache):
+class UpdateReference(DebugLevel, Cache):
     old_key: _ReferenceKey
     new_key: _ReferenceKey
     cached_key: _ReferenceKey
     code: str = "E028"
 
     def message(self) -> str:
-        return f"updated reference from {self.old_key} -> {self.cached_key} to "\
+        return (
+            f"updated reference from {self.old_key} -> {self.cached_key} to "
             "{self.new_key} -> {self.cached_key}"
+        )
 
 
 @dataclass
-class TemporaryRelation(DebugLevel, Cli, File, Cache):
+class TemporaryRelation(DebugLevel, Cache):
     key: _ReferenceKey
     code: str = "E029"
 
@@ -688,7 +657,7 @@ class TemporaryRelation(DebugLevel, Cli, File, Cache):
 
 
 @dataclass
-class RenameSchema(DebugLevel, Cli, File, Cache):
+class RenameSchema(DebugLevel, Cache):
     old_key: _ReferenceKey
     new_key: _ReferenceKey
     code: str = "E030"
@@ -698,60 +667,52 @@ class RenameSchema(DebugLevel, Cli, File, Cache):
 
 
 @dataclass
-class DumpBeforeAddGraph(DebugLevel, Cli, File, Cache):
-    # large value. delay not necessary since every debug level message is logged anyway.
-    dump: Dict[str, List[str]]
+class DumpBeforeAddGraph(DebugLevel, Cache):
+    dump: Lazy[Dict[str, List[str]]]
     code: str = "E031"
 
     def message(self) -> str:
-        return f"before adding : {self.dump}"
+        return f"before adding : {self.dump.force()}"
 
 
 @dataclass
-class DumpAfterAddGraph(DebugLevel, Cli, File, Cache):
-    # large value. delay not necessary since every debug level message is logged anyway.
-    dump: Dict[str, List[str]]
+class DumpAfterAddGraph(DebugLevel, Cache):
+    dump: Lazy[Dict[str, List[str]]]
     code: str = "E032"
 
     def message(self) -> str:
-        return f"after adding: {self.dump}"
+        return f"after adding: {self.dump.force()}"
 
 
 @dataclass
-class DumpBeforeRenameSchema(DebugLevel, Cli, File, Cache):
-    # large value. delay not necessary since every debug level message is logged anyway.
-    dump: Dict[str, List[str]]
+class DumpBeforeRenameSchema(DebugLevel, Cache):
+    dump: Lazy[Dict[str, List[str]]]
     code: str = "E033"
 
     def message(self) -> str:
-        return f"before rename: {self.dump}"
+        return f"before rename: {self.dump.force()}"
 
 
 @dataclass
-class DumpAfterRenameSchema(DebugLevel, Cli, File, Cache):
-    # large value. delay not necessary since every debug level message is logged anyway.
-    dump: Dict[str, List[str]]
+class DumpAfterRenameSchema(DebugLevel, Cache):
+    dump: Lazy[Dict[str, List[str]]]
     code: str = "E034"
 
     def message(self) -> str:
-        return f"after rename: {self.dump}"
+        return f"after rename: {self.dump.force()}"
 
 
 @dataclass
-class AdapterImportError(InfoLevel, Cli, File):
-    exc: ModuleNotFoundError
+class AdapterImportError(InfoLevel):
+    exc: Exception
     code: str = "E035"
 
     def message(self) -> str:
         return f"Error importing adapter: {self.exc}"
 
-    @classmethod
-    def asdict(cls, data: list) -> dict:
-        return dict((k, str(v)) for k, v in data)
-
 
 @dataclass
-class PluginLoadError(ShowException, DebugLevel, Cli, File):
+class PluginLoadError(ShowException, DebugLevel):
     code: str = "E036"
 
     def message(self):
@@ -759,7 +720,7 @@ class PluginLoadError(ShowException, DebugLevel, Cli, File):
 
 
 @dataclass
-class NewConnectionOpening(DebugLevel, Cli, File):
+class NewConnectionOpening(DebugLevel):
     connection_state: str
     code: str = "E037"
 
@@ -768,7 +729,7 @@ class NewConnectionOpening(DebugLevel, Cli, File):
 
 
 @dataclass
-class TimingInfoCollected(DebugLevel, Cli, File):
+class TimingInfoCollected(DebugLevel):
     code: str = "Z010"
 
     def message(self) -> str:
@@ -776,7 +737,7 @@ class TimingInfoCollected(DebugLevel, Cli, File):
 
 
 @dataclass
-class MergedFromState(DebugLevel, Cli, File):
+class MergedFromState(DebugLevel):
     nbr_merged: int
     sample: List
     code: str = "A004"
@@ -786,7 +747,7 @@ class MergedFromState(DebugLevel, Cli, File):
 
 
 @dataclass
-class MissingProfileTarget(InfoLevel, Cli, File):
+class MissingProfileTarget(InfoLevel):
     profile_name: str
     target_name: str
     code: str = "A005"
@@ -796,25 +757,7 @@ class MissingProfileTarget(InfoLevel, Cli, File):
 
 
 @dataclass
-class ProfileLoadError(ShowException, DebugLevel, Cli, File):
-    exc: Exception
-    code: str = "A006"
-
-    def message(self) -> str:
-        return f"Profile not loaded due to error: {self.exc}"
-
-
-@dataclass
-class ProfileNotFound(InfoLevel, Cli, File):
-    profile_name: Optional[str]
-    code: str = "A007"
-
-    def message(self) -> str:
-        return f'No profile "{self.profile_name}" found, continuing with no target'
-
-
-@dataclass
-class InvalidVarsYAML(ErrorLevel, Cli, File):
+class InvalidVarsYAML(ErrorLevel):
     code: str = "A008"
 
     def message(self) -> str:
@@ -822,7 +765,7 @@ class InvalidVarsYAML(ErrorLevel, Cli, File):
 
 
 @dataclass
-class GenericTestFileParse(DebugLevel, Cli, File):
+class GenericTestFileParse(DebugLevel):
     path: str
     code: str = "I011"
 
@@ -831,7 +774,7 @@ class GenericTestFileParse(DebugLevel, Cli, File):
 
 
 @dataclass
-class MacroFileParse(DebugLevel, Cli, File):
+class MacroFileParse(DebugLevel):
     path: str
     code: str = "I012"
 
@@ -840,7 +783,7 @@ class MacroFileParse(DebugLevel, Cli, File):
 
 
 @dataclass
-class PartialParsingFullReparseBecauseOfError(InfoLevel, Cli, File):
+class PartialParsingFullReparseBecauseOfError(InfoLevel):
     code: str = "I013"
 
     def message(self) -> str:
@@ -848,7 +791,7 @@ class PartialParsingFullReparseBecauseOfError(InfoLevel, Cli, File):
 
 
 @dataclass
-class PartialParsingExceptionFile(DebugLevel, Cli, File):
+class PartialParsingExceptionFile(DebugLevel):
     file: str
     code: str = "I014"
 
@@ -857,7 +800,7 @@ class PartialParsingExceptionFile(DebugLevel, Cli, File):
 
 
 @dataclass
-class PartialParsingFile(DebugLevel, Cli, File):
+class PartialParsingFile(DebugLevel):
     file_dict: Dict
     code: str = "I015"
 
@@ -866,7 +809,7 @@ class PartialParsingFile(DebugLevel, Cli, File):
 
 
 @dataclass
-class PartialParsingException(DebugLevel, Cli, File):
+class PartialParsingException(DebugLevel):
     exc_info: Dict
     code: str = "I016"
 
@@ -875,7 +818,7 @@ class PartialParsingException(DebugLevel, Cli, File):
 
 
 @dataclass
-class PartialParsingSkipParsing(DebugLevel, Cli, File):
+class PartialParsingSkipParsing(DebugLevel):
     code: str = "I017"
 
     def message(self) -> str:
@@ -883,7 +826,7 @@ class PartialParsingSkipParsing(DebugLevel, Cli, File):
 
 
 @dataclass
-class PartialParsingMacroChangeStartFullParse(InfoLevel, Cli, File):
+class PartialParsingMacroChangeStartFullParse(InfoLevel):
     code: str = "I018"
 
     def message(self) -> str:
@@ -891,7 +834,7 @@ class PartialParsingMacroChangeStartFullParse(InfoLevel, Cli, File):
 
 
 @dataclass
-class PartialParsingProjectEnvVarsChanged(InfoLevel, Cli, File):
+class PartialParsingProjectEnvVarsChanged(InfoLevel):
     code: str = "I019"
 
     def message(self) -> str:
@@ -899,7 +842,7 @@ class PartialParsingProjectEnvVarsChanged(InfoLevel, Cli, File):
 
 
 @dataclass
-class PartialParsingProfileEnvVarsChanged(InfoLevel, Cli, File):
+class PartialParsingProfileEnvVarsChanged(InfoLevel):
     code: str = "I020"
 
     def message(self) -> str:
@@ -907,7 +850,7 @@ class PartialParsingProfileEnvVarsChanged(InfoLevel, Cli, File):
 
 
 @dataclass
-class PartialParsingDeletedMetric(DebugLevel, Cli, File):
+class PartialParsingDeletedMetric(DebugLevel):
     id: str
     code: str = "I021"
 
@@ -916,70 +859,76 @@ class PartialParsingDeletedMetric(DebugLevel, Cli, File):
 
 
 @dataclass
-class ManifestWrongMetadataVersion(DebugLevel, Cli, File):
+class ManifestWrongMetadataVersion(DebugLevel):
     version: str
     code: str = "I022"
 
     def message(self) -> str:
-        return ("Manifest metadata did not contain correct version. "
-                f"Contained '{self.version}' instead.")
+        return (
+            "Manifest metadata did not contain correct version. "
+            f"Contained '{self.version}' instead."
+        )
 
 
 @dataclass
-class PartialParsingVersionMismatch(InfoLevel, Cli, File):
+class PartialParsingVersionMismatch(InfoLevel):
     saved_version: str
     current_version: str
     code: str = "I023"
 
     def message(self) -> str:
-        return ("Unable to do partial parsing because of a dbt version mismatch. "
-                f"Saved manifest version: {self.saved_version}. "
-                f"Current version: {self.current_version}.")
+        return (
+            "Unable to do partial parsing because of a dbt version mismatch. "
+            f"Saved manifest version: {self.saved_version}. "
+            f"Current version: {self.current_version}."
+        )
 
 
 @dataclass
-class PartialParsingFailedBecauseConfigChange(InfoLevel, Cli, File):
+class PartialParsingFailedBecauseConfigChange(InfoLevel):
     code: str = "I024"
 
     def message(self) -> str:
-        return ("Unable to do partial parsing because config vars, "
-                "config profile, or config target have changed")
+        return (
+            "Unable to do partial parsing because config vars, "
+            "config profile, or config target have changed"
+        )
 
 
 @dataclass
-class PartialParsingFailedBecauseProfileChange(InfoLevel, Cli, File):
+class PartialParsingFailedBecauseProfileChange(InfoLevel):
     code: str = "I025"
 
     def message(self) -> str:
-        return ("Unable to do partial parsing because profile has changed")
+        return "Unable to do partial parsing because profile has changed"
 
 
 @dataclass
-class PartialParsingFailedBecauseNewProjectDependency(InfoLevel, Cli, File):
+class PartialParsingFailedBecauseNewProjectDependency(InfoLevel):
     code: str = "I026"
 
     def message(self) -> str:
-        return ("Unable to do partial parsing because a project dependency has been added")
+        return "Unable to do partial parsing because a project dependency has been added"
 
 
 @dataclass
-class PartialParsingFailedBecauseHashChanged(InfoLevel, Cli, File):
+class PartialParsingFailedBecauseHashChanged(InfoLevel):
     code: str = "I027"
 
     def message(self) -> str:
-        return ("Unable to do partial parsing because a project config has changed")
+        return "Unable to do partial parsing because a project config has changed"
 
 
 @dataclass
-class PartialParsingNotEnabled(DebugLevel, Cli, File):
+class PartialParsingNotEnabled(DebugLevel):
     code: str = "I028"
 
     def message(self) -> str:
-        return ("Partial parsing not enabled")
+        return "Partial parsing not enabled"
 
 
 @dataclass
-class ParsedFileLoadFailed(ShowException, DebugLevel, Cli, File):
+class ParsedFileLoadFailed(ShowException, DebugLevel):
     path: str
     exc: Exception
     code: str = "I029"
@@ -989,15 +938,15 @@ class ParsedFileLoadFailed(ShowException, DebugLevel, Cli, File):
 
 
 @dataclass
-class PartialParseSaveFileNotFound(InfoLevel, Cli, File):
+class PartialParseSaveFileNotFound(InfoLevel):
     code: str = "I030"
 
     def message(self) -> str:
-        return ("Partial parse save file not found. Starting full parse.")
+        return "Partial parse save file not found. Starting full parse."
 
 
 @dataclass
-class StaticParserCausedJinjaRendering(DebugLevel, Cli, File):
+class StaticParserCausedJinjaRendering(DebugLevel):
     path: str
     code: str = "I031"
 
@@ -1008,7 +957,7 @@ class StaticParserCausedJinjaRendering(DebugLevel, Cli, File):
 # TODO: Experimental/static parser uses these for testing and some may be a good use case for
 #       the `TestLevel` logger once we implement it.  Some will probably stay `DebugLevel`.
 @dataclass
-class UsingExperimentalParser(DebugLevel, Cli, File):
+class UsingExperimentalParser(DebugLevel):
     path: str
     code: str = "I032"
 
@@ -1017,7 +966,7 @@ class UsingExperimentalParser(DebugLevel, Cli, File):
 
 
 @dataclass
-class SampleFullJinjaRendering(DebugLevel, Cli, File):
+class SampleFullJinjaRendering(DebugLevel):
     path: str
     code: str = "I033"
 
@@ -1026,7 +975,7 @@ class SampleFullJinjaRendering(DebugLevel, Cli, File):
 
 
 @dataclass
-class StaticParserFallbackJinjaRendering(DebugLevel, Cli, File):
+class StaticParserFallbackJinjaRendering(DebugLevel):
     path: str
     code: str = "I034"
 
@@ -1035,7 +984,7 @@ class StaticParserFallbackJinjaRendering(DebugLevel, Cli, File):
 
 
 @dataclass
-class StaticParsingMacroOverrideDetected(DebugLevel, Cli, File):
+class StaticParsingMacroOverrideDetected(DebugLevel):
     path: str
     code: str = "I035"
 
@@ -1044,7 +993,7 @@ class StaticParsingMacroOverrideDetected(DebugLevel, Cli, File):
 
 
 @dataclass
-class StaticParserSuccess(DebugLevel, Cli, File):
+class StaticParserSuccess(DebugLevel):
     path: str
     code: str = "I036"
 
@@ -1053,7 +1002,7 @@ class StaticParserSuccess(DebugLevel, Cli, File):
 
 
 @dataclass
-class StaticParserFailure(DebugLevel, Cli, File):
+class StaticParserFailure(DebugLevel):
     path: str
     code: str = "I037"
 
@@ -1062,7 +1011,7 @@ class StaticParserFailure(DebugLevel, Cli, File):
 
 
 @dataclass
-class ExperimentalParserSuccess(DebugLevel, Cli, File):
+class ExperimentalParserSuccess(DebugLevel):
     path: str
     code: str = "I038"
 
@@ -1071,7 +1020,7 @@ class ExperimentalParserSuccess(DebugLevel, Cli, File):
 
 
 @dataclass
-class ExperimentalParserFailure(DebugLevel, Cli, File):
+class ExperimentalParserFailure(DebugLevel):
     path: str
     code: str = "I039"
 
@@ -1080,21 +1029,23 @@ class ExperimentalParserFailure(DebugLevel, Cli, File):
 
 
 @dataclass
-class PartialParsingEnabled(DebugLevel, Cli, File):
+class PartialParsingEnabled(DebugLevel):
     deleted: int
     added: int
     changed: int
     code: str = "I040"
 
     def message(self) -> str:
-        return (f"Partial parsing enabled: "
-                f"{self.deleted} files deleted, "
-                f"{self.added} files added, "
-                f"{self.changed} files changed.")
+        return (
+            f"Partial parsing enabled: "
+            f"{self.deleted} files deleted, "
+            f"{self.added} files added, "
+            f"{self.changed} files changed."
+        )
 
 
 @dataclass
-class PartialParsingAddedFile(DebugLevel, Cli, File):
+class PartialParsingAddedFile(DebugLevel):
     file_id: str
     code: str = "I041"
 
@@ -1103,7 +1054,7 @@ class PartialParsingAddedFile(DebugLevel, Cli, File):
 
 
 @dataclass
-class PartialParsingDeletedFile(DebugLevel, Cli, File):
+class PartialParsingDeletedFile(DebugLevel):
     file_id: str
     code: str = "I042"
 
@@ -1112,7 +1063,7 @@ class PartialParsingDeletedFile(DebugLevel, Cli, File):
 
 
 @dataclass
-class PartialParsingUpdatedFile(DebugLevel, Cli, File):
+class PartialParsingUpdatedFile(DebugLevel):
     file_id: str
     code: str = "I043"
 
@@ -1121,7 +1072,7 @@ class PartialParsingUpdatedFile(DebugLevel, Cli, File):
 
 
 @dataclass
-class PartialParsingNodeMissingInSourceFile(DebugLevel, Cli, File):
+class PartialParsingNodeMissingInSourceFile(DebugLevel):
     source_file: str
     code: str = "I044"
 
@@ -1130,7 +1081,7 @@ class PartialParsingNodeMissingInSourceFile(DebugLevel, Cli, File):
 
 
 @dataclass
-class PartialParsingMissingNodes(DebugLevel, Cli, File):
+class PartialParsingMissingNodes(DebugLevel):
     file_id: str
     code: str = "I045"
 
@@ -1139,7 +1090,7 @@ class PartialParsingMissingNodes(DebugLevel, Cli, File):
 
 
 @dataclass
-class PartialParsingChildMapMissingUniqueID(DebugLevel, Cli, File):
+class PartialParsingChildMapMissingUniqueID(DebugLevel):
     unique_id: str
     code: str = "I046"
 
@@ -1148,7 +1099,7 @@ class PartialParsingChildMapMissingUniqueID(DebugLevel, Cli, File):
 
 
 @dataclass
-class PartialParsingUpdateSchemaFile(DebugLevel, Cli, File):
+class PartialParsingUpdateSchemaFile(DebugLevel):
     file_id: str
     code: str = "I047"
 
@@ -1157,7 +1108,7 @@ class PartialParsingUpdateSchemaFile(DebugLevel, Cli, File):
 
 
 @dataclass
-class PartialParsingDeletedSource(DebugLevel, Cli, File):
+class PartialParsingDeletedSource(DebugLevel):
     unique_id: str
     code: str = "I048"
 
@@ -1166,7 +1117,7 @@ class PartialParsingDeletedSource(DebugLevel, Cli, File):
 
 
 @dataclass
-class PartialParsingDeletedExposure(DebugLevel, Cli, File):
+class PartialParsingDeletedExposure(DebugLevel):
     unique_id: str
     code: str = "I049"
 
@@ -1175,7 +1126,7 @@ class PartialParsingDeletedExposure(DebugLevel, Cli, File):
 
 
 @dataclass
-class InvalidDisabledSourceInTestNode(WarnLevel, Cli, File):
+class InvalidDisabledSourceInTestNode(WarnLevel):
     msg: str
     code: str = "I050"
 
@@ -1184,34 +1135,34 @@ class InvalidDisabledSourceInTestNode(WarnLevel, Cli, File):
 
 
 @dataclass
-class InvalidRefInTestNode(WarnLevel, Cli, File):
+class InvalidRefInTestNode(DebugLevel):
     msg: str
     code: str = "I051"
 
     def message(self) -> str:
-        return ui.warning_tag(self.msg)
+        return self.msg
 
 
 @dataclass
-class RunningOperationCaughtError(ErrorLevel, Cli, File):
+class RunningOperationCaughtError(ErrorLevel):
     exc: Exception
     code: str = "Q001"
 
     def message(self) -> str:
-        return f'Encountered an error while running operation: {self.exc}'
+        return f"Encountered an error while running operation: {self.exc}"
 
 
 @dataclass
-class RunningOperationUncaughtError(ErrorLevel, Cli, File):
+class RunningOperationUncaughtError(ErrorLevel):
     exc: Exception
     code: str = "FF01"
 
     def message(self) -> str:
-        return f'Encountered an error while running operation: {self.exc}'
+        return f"Encountered an error while running operation: {self.exc}"
 
 
 @dataclass
-class DbtProjectError(ErrorLevel, Cli, File):
+class DbtProjectError(ErrorLevel):
     code: str = "A009"
 
     def message(self) -> str:
@@ -1219,7 +1170,7 @@ class DbtProjectError(ErrorLevel, Cli, File):
 
 
 @dataclass
-class DbtProjectErrorException(ErrorLevel, Cli, File):
+class DbtProjectErrorException(ErrorLevel):
     exc: Exception
     code: str = "A010"
 
@@ -1228,7 +1179,7 @@ class DbtProjectErrorException(ErrorLevel, Cli, File):
 
 
 @dataclass
-class DbtProfileError(ErrorLevel, Cli, File):
+class DbtProfileError(ErrorLevel):
     code: str = "A011"
 
     def message(self) -> str:
@@ -1236,7 +1187,7 @@ class DbtProfileError(ErrorLevel, Cli, File):
 
 
 @dataclass
-class DbtProfileErrorException(ErrorLevel, Cli, File):
+class DbtProfileErrorException(ErrorLevel):
     exc: Exception
     code: str = "A012"
 
@@ -1245,7 +1196,7 @@ class DbtProfileErrorException(ErrorLevel, Cli, File):
 
 
 @dataclass
-class ProfileListTitle(InfoLevel, Cli, File):
+class ProfileListTitle(InfoLevel):
     code: str = "A013"
 
     def message(self) -> str:
@@ -1253,7 +1204,7 @@ class ProfileListTitle(InfoLevel, Cli, File):
 
 
 @dataclass
-class ListSingleProfile(InfoLevel, Cli, File):
+class ListSingleProfile(InfoLevel):
     profile: str
     code: str = "A014"
 
@@ -1262,7 +1213,7 @@ class ListSingleProfile(InfoLevel, Cli, File):
 
 
 @dataclass
-class NoDefinedProfiles(InfoLevel, Cli, File):
+class NoDefinedProfiles(InfoLevel):
     code: str = "A015"
 
     def message(self) -> str:
@@ -1270,7 +1221,7 @@ class NoDefinedProfiles(InfoLevel, Cli, File):
 
 
 @dataclass
-class ProfileHelpMessage(InfoLevel, Cli, File):
+class ProfileHelpMessage(InfoLevel):
     code: str = "A016"
 
     def message(self) -> str:
@@ -1283,7 +1234,7 @@ https://docs.getdbt.com/docs/configure-your-profile
 
 
 @dataclass
-class CatchableExceptionOnRun(ShowException, DebugLevel, Cli, File):
+class CatchableExceptionOnRun(ShowException, DebugLevel):
     exc: Exception
     code: str = "W002"
 
@@ -1292,29 +1243,27 @@ class CatchableExceptionOnRun(ShowException, DebugLevel, Cli, File):
 
 
 @dataclass
-class InternalExceptionOnRun(DebugLevel, Cli, File):
+class InternalExceptionOnRun(DebugLevel):
     build_path: str
     exc: Exception
     code: str = "W003"
 
     def message(self) -> str:
-        prefix = 'Internal error executing {}'.format(self.build_path)
+        prefix = "Internal error executing {}".format(self.build_path)
 
         INTERNAL_ERROR_STRING = """This is an error in dbt. Please try again. If \
 the error persists, open an issue at https://github.com/dbt-labs/dbt-core
 """.strip()
 
         return "{prefix}\n{error}\n\n{note}".format(
-            prefix=ui.red(prefix),
-            error=str(self.exc).strip(),
-            note=INTERNAL_ERROR_STRING
+            prefix=ui.red(prefix), error=str(self.exc).strip(), note=INTERNAL_ERROR_STRING
         )
 
 
 # This prints the stack trace at the debug level while allowing just the nice exception message
 # at the error level - or whatever other level chosen.  Used in multiple places.
 @dataclass
-class PrintDebugStackTrace(ShowException, DebugLevel, Cli, File):
+class PrintDebugStackTrace(ShowException, DebugLevel):
     code: str = "Z011"
 
     def message(self) -> str:
@@ -1322,10 +1271,10 @@ class PrintDebugStackTrace(ShowException, DebugLevel, Cli, File):
 
 
 @dataclass
-class GenericExceptionOnRun(ErrorLevel, Cli, File):
+class GenericExceptionOnRun(ErrorLevel):
     build_path: Optional[str]
     unique_id: str
-    exc: str  # TODO: make this the actual exception once we have a better searilization strategy
+    exc: Exception
     code: str = "W004"
 
     def message(self) -> str:
@@ -1333,25 +1282,21 @@ class GenericExceptionOnRun(ErrorLevel, Cli, File):
         if node_description is None:
             node_description = self.unique_id
         prefix = "Unhandled error while executing {}".format(node_description)
-        return "{prefix}\n{error}".format(
-            prefix=ui.red(prefix),
-            error=str(self.exc).strip()
-        )
+        return "{prefix}\n{error}".format(prefix=ui.red(prefix), error=str(self.exc).strip())
 
 
 @dataclass
-class NodeConnectionReleaseError(ShowException, DebugLevel, Cli, File):
+class NodeConnectionReleaseError(ShowException, DebugLevel):
     node_name: str
     exc: Exception
     code: str = "W005"
 
     def message(self) -> str:
-        return ('Error releasing connection for node {}: {!s}'
-                .format(self.node_name, self.exc))
+        return "Error releasing connection for node {}: {!s}".format(self.node_name, self.exc)
 
 
 @dataclass
-class CheckCleanPath(InfoLevel, Cli):
+class CheckCleanPath(InfoLevel, NoFile):
     path: str
     code: str = "Z012"
 
@@ -1360,9 +1305,8 @@ class CheckCleanPath(InfoLevel, Cli):
 
 
 @dataclass
-class ConfirmCleanPath(InfoLevel, Cli):
+class ConfirmCleanPath(InfoLevel, NoFile):
     path: str
-
     code: str = "Z013"
 
     def message(self) -> str:
@@ -1370,7 +1314,7 @@ class ConfirmCleanPath(InfoLevel, Cli):
 
 
 @dataclass
-class ProtectedCleanPath(InfoLevel, Cli):
+class ProtectedCleanPath(InfoLevel, NoFile):
     path: str
     code: str = "Z014"
 
@@ -1379,7 +1323,7 @@ class ProtectedCleanPath(InfoLevel, Cli):
 
 
 @dataclass
-class FinishedCleanPaths(InfoLevel, Cli):
+class FinishedCleanPaths(InfoLevel, NoFile):
     code: str = "Z015"
 
     def message(self) -> str:
@@ -1387,7 +1331,7 @@ class FinishedCleanPaths(InfoLevel, Cli):
 
 
 @dataclass
-class OpenCommand(InfoLevel, Cli, File):
+class OpenCommand(InfoLevel):
     open_cmd: str
     profiles_dir: str
     code: str = "Z016"
@@ -1397,23 +1341,22 @@ class OpenCommand(InfoLevel, Cli, File):
 
 {open_cmd} {profiles_dir}"""
         message = PROFILE_DIR_MESSAGE.format(
-            open_cmd=self.open_cmd,
-            profiles_dir=self.profiles_dir
+            open_cmd=self.open_cmd, profiles_dir=self.profiles_dir
         )
 
         return message
 
 
 @dataclass
-class DepsNoPackagesFound(InfoLevel, Cli, File):
+class DepsNoPackagesFound(InfoLevel):
     code: str = "M013"
 
     def message(self) -> str:
-        return 'Warning: No packages were found in packages.yml'
+        return "Warning: No packages were found in packages.yml"
 
 
 @dataclass
-class DepsStartPackageInstall(InfoLevel, Cli, File):
+class DepsStartPackageInstall(InfoLevel):
     package_name: str
     code: str = "M014"
 
@@ -1422,7 +1365,7 @@ class DepsStartPackageInstall(InfoLevel, Cli, File):
 
 
 @dataclass
-class DepsInstallInfo(InfoLevel, Cli, File):
+class DepsInstallInfo(InfoLevel):
     version_name: str
     code: str = "M015"
 
@@ -1431,7 +1374,7 @@ class DepsInstallInfo(InfoLevel, Cli, File):
 
 
 @dataclass
-class DepsUpdateAvailable(InfoLevel, Cli, File):
+class DepsUpdateAvailable(InfoLevel):
     version_latest: str
     code: str = "M016"
 
@@ -1440,7 +1383,7 @@ class DepsUpdateAvailable(InfoLevel, Cli, File):
 
 
 @dataclass
-class DepsUTD(InfoLevel, Cli, File):
+class DepsUTD(InfoLevel):
     code: str = "M017"
 
     def message(self) -> str:
@@ -1448,7 +1391,7 @@ class DepsUTD(InfoLevel, Cli, File):
 
 
 @dataclass
-class DepsListSubdirectory(InfoLevel, Cli, File):
+class DepsListSubdirectory(InfoLevel):
     subdirectory: str
     code: str = "M018"
 
@@ -1457,17 +1400,19 @@ class DepsListSubdirectory(InfoLevel, Cli, File):
 
 
 @dataclass
-class DepsNotifyUpdatesAvailable(InfoLevel, Cli, File):
+class DepsNotifyUpdatesAvailable(InfoLevel):
     packages: List[str]
     code: str = "M019"
 
     def message(self) -> str:
-        return ('Updates available for packages: {} \
-                \nUpdate your versions in packages.yml, then run dbt deps'.format(self.packages))
+        return "Updates available for packages: {} \
+                \nUpdate your versions in packages.yml, then run dbt deps".format(
+            self.packages
+        )
 
 
 @dataclass
-class DatabaseErrorRunning(InfoLevel, Cli, File):
+class DatabaseErrorRunning(InfoLevel):
     hook_type: str
     code: str = "E038"
 
@@ -1476,26 +1421,26 @@ class DatabaseErrorRunning(InfoLevel, Cli, File):
 
 
 @dataclass
-class EmptyLine(InfoLevel, Cli, File):
+class EmptyLine(InfoLevel):
     code: str = "Z017"
 
     def message(self) -> str:
-        return ''
+        return ""
 
 
 @dataclass
-class HooksRunning(InfoLevel, Cli, File):
+class HooksRunning(InfoLevel):
     num_hooks: int
     hook_type: str
     code: str = "E039"
 
     def message(self) -> str:
-        plural = 'hook' if self.num_hooks == 1 else 'hooks'
+        plural = "hook" if self.num_hooks == 1 else "hooks"
         return f"Running {self.num_hooks} {self.hook_type} {plural}"
 
 
 @dataclass
-class HookFinished(InfoLevel, Cli, File):
+class HookFinished(InfoLevel):
     stat_line: str
     execution: str
     code: str = "E040"
@@ -1505,17 +1450,19 @@ class HookFinished(InfoLevel, Cli, File):
 
 
 @dataclass
-class WriteCatalogFailure(ErrorLevel, Cli, File):
+class WriteCatalogFailure(ErrorLevel):
     num_exceptions: int
     code: str = "E041"
 
     def message(self) -> str:
-        return (f"dbt encountered {self.num_exceptions} failure{(self.num_exceptions != 1) * 's'} "
-                "while writing the catalog")
+        return (
+            f"dbt encountered {self.num_exceptions} failure{(self.num_exceptions != 1) * 's'} "
+            "while writing the catalog"
+        )
 
 
 @dataclass
-class CatalogWritten(InfoLevel, Cli, File):
+class CatalogWritten(InfoLevel):
     path: str
     code: str = "E042"
 
@@ -1524,7 +1471,7 @@ class CatalogWritten(InfoLevel, Cli, File):
 
 
 @dataclass
-class CannotGenerateDocs(InfoLevel, Cli, File):
+class CannotGenerateDocs(InfoLevel):
     code: str = "E043"
 
     def message(self) -> str:
@@ -1532,7 +1479,7 @@ class CannotGenerateDocs(InfoLevel, Cli, File):
 
 
 @dataclass
-class BuildingCatalog(InfoLevel, Cli, File):
+class BuildingCatalog(InfoLevel):
     code: str = "E044"
 
     def message(self) -> str:
@@ -1540,7 +1487,7 @@ class BuildingCatalog(InfoLevel, Cli, File):
 
 
 @dataclass
-class CompileComplete(InfoLevel, Cli, File):
+class CompileComplete(InfoLevel):
     code: str = "Q002"
 
     def message(self) -> str:
@@ -1548,7 +1495,7 @@ class CompileComplete(InfoLevel, Cli, File):
 
 
 @dataclass
-class FreshnessCheckComplete(InfoLevel, Cli, File):
+class FreshnessCheckComplete(InfoLevel):
     code: str = "Q003"
 
     def message(self) -> str:
@@ -1556,7 +1503,7 @@ class FreshnessCheckComplete(InfoLevel, Cli, File):
 
 
 @dataclass
-class ServingDocsPort(InfoLevel, Cli, File):
+class ServingDocsPort(InfoLevel):
     address: str
     port: int
     code: str = "Z018"
@@ -1566,7 +1513,7 @@ class ServingDocsPort(InfoLevel, Cli, File):
 
 
 @dataclass
-class ServingDocsAccessInfo(InfoLevel, Cli, File):
+class ServingDocsAccessInfo(InfoLevel):
     port: str
     code: str = "Z019"
 
@@ -1575,7 +1522,7 @@ class ServingDocsAccessInfo(InfoLevel, Cli, File):
 
 
 @dataclass
-class ServingDocsExitInfo(InfoLevel, Cli, File):
+class ServingDocsExitInfo(InfoLevel):
     code: str = "Z020"
 
     def message(self) -> str:
@@ -1583,7 +1530,7 @@ class ServingDocsExitInfo(InfoLevel, Cli, File):
 
 
 @dataclass
-class SeedHeader(InfoLevel, Cli, File):
+class SeedHeader(InfoLevel):
     header: str
     code: str = "Q004"
 
@@ -1592,7 +1539,7 @@ class SeedHeader(InfoLevel, Cli, File):
 
 
 @dataclass
-class SeedHeaderSeperator(InfoLevel, Cli, File):
+class SeedHeaderSeparator(InfoLevel):
     len_header: int
     code: str = "Q005"
 
@@ -1601,41 +1548,41 @@ class SeedHeaderSeperator(InfoLevel, Cli, File):
 
 
 @dataclass
-class RunResultWarning(WarnLevel, Cli, File):
+class RunResultWarning(WarnLevel):
     resource_type: str
     node_name: str
     path: str
     code: str = "Z021"
 
     def message(self) -> str:
-        info = 'Warning'
+        info = "Warning"
         return ui.yellow(f"{info} in {self.resource_type} {self.node_name} ({self.path})")
 
 
 @dataclass
-class RunResultFailure(ErrorLevel, Cli, File):
+class RunResultFailure(ErrorLevel):
     resource_type: str
     node_name: str
     path: str
     code: str = "Z022"
 
     def message(self) -> str:
-        info = 'Failure'
+        info = "Failure"
         return ui.red(f"{info} in {self.resource_type} {self.node_name} ({self.path})")
 
 
 @dataclass
-class StatsLine(InfoLevel, Cli, File):
+class StatsLine(InfoLevel):
     stats: Dict
     code: str = "Z023"
 
     def message(self) -> str:
-        stats_line = ("Done. PASS={pass} WARN={warn} ERROR={error} SKIP={skip} TOTAL={total}")
+        stats_line = "Done. PASS={pass} WARN={warn} ERROR={error} SKIP={skip} TOTAL={total}"
         return stats_line.format(**self.stats)
 
 
 @dataclass
-class RunResultError(ErrorLevel, Cli, File):
+class RunResultError(ErrorLevel):
     msg: str
     code: str = "Z024"
 
@@ -1644,7 +1591,7 @@ class RunResultError(ErrorLevel, Cli, File):
 
 
 @dataclass
-class RunResultErrorNoMessage(ErrorLevel, Cli, File):
+class RunResultErrorNoMessage(ErrorLevel):
     status: str
     code: str = "Z025"
 
@@ -1653,7 +1600,7 @@ class RunResultErrorNoMessage(ErrorLevel, Cli, File):
 
 
 @dataclass
-class SQLCompiledPath(InfoLevel, Cli, File):
+class SQLCompiledPath(InfoLevel):
     path: str
     code: str = "Z026"
 
@@ -1662,7 +1609,7 @@ class SQLCompiledPath(InfoLevel, Cli, File):
 
 
 @dataclass
-class SQlRunnerException(ShowException, DebugLevel, Cli, File):
+class SQlRunnerException(ShowException, DebugLevel):
     exc: Exception
     code: str = "Q006"
 
@@ -1671,18 +1618,18 @@ class SQlRunnerException(ShowException, DebugLevel, Cli, File):
 
 
 @dataclass
-class CheckNodeTestFailure(InfoLevel, Cli, File):
+class CheckNodeTestFailure(InfoLevel):
     relation_name: str
     code: str = "Z027"
 
     def message(self) -> str:
         msg = f"select * from {self.relation_name}"
-        border = '-' * len(msg)
+        border = "-" * len(msg)
         return f"  See test failures:\n  {border}\n  {msg}\n  {border}"
 
 
 @dataclass
-class FirstRunResultError(ErrorLevel, Cli, File):
+class FirstRunResultError(ErrorLevel):
     msg: str
     code: str = "Z028"
 
@@ -1691,7 +1638,7 @@ class FirstRunResultError(ErrorLevel, Cli, File):
 
 
 @dataclass
-class AfterFirstRunResultError(ErrorLevel, Cli, File):
+class AfterFirstRunResultError(ErrorLevel):
     msg: str
     code: str = "Z029"
 
@@ -1700,185 +1647,176 @@ class AfterFirstRunResultError(ErrorLevel, Cli, File):
 
 
 @dataclass
-class EndOfRunSummary(InfoLevel, Cli, File):
+class EndOfRunSummary(InfoLevel):
     num_errors: int
     num_warnings: int
-    keyboard_interrupt: bool = False
+    keyboard_interrupt: bool
     code: str = "Z030"
 
     def message(self) -> str:
-        error_plural = pluralize(self.num_errors, 'error')
-        warn_plural = pluralize(self.num_warnings, 'warning')
+        error_plural = pluralize(self.num_errors, "error")
+        warn_plural = pluralize(self.num_warnings, "warning")
         if self.keyboard_interrupt:
-            message = ui.yellow('Exited because of keyboard interrupt.')
+            message = ui.yellow("Exited because of keyboard interrupt.")
         elif self.num_errors > 0:
-            message = ui.red("Completed with {} and {}:".format(
-                error_plural, warn_plural))
+            message = ui.red("Completed with {} and {}:".format(error_plural, warn_plural))
         elif self.num_warnings > 0:
-            message = ui.yellow('Completed with {}:'.format(warn_plural))
+            message = ui.yellow("Completed with {}:".format(warn_plural))
         else:
-            message = ui.green('Completed successfully')
+            message = ui.green("Completed successfully")
         return message
 
 
 @dataclass
-class PrintStartLine(InfoLevel, Cli, File, NodeInfo):
+class PrintStartLine(InfoLevel, NodeInfo):
     description: str
     index: int
     total: int
-    report_node_data: ParsedModelNode
     code: str = "Q033"
 
     def message(self) -> str:
         msg = f"START {self.description}"
-        return format_fancy_output_line(
-            msg=msg,
-            status='RUN',
-            index=self.index,
-            total=self.total
-        )
+        return format_fancy_output_line(msg=msg, status="RUN", index=self.index, total=self.total)
 
 
 @dataclass
-class PrintHookStartLine(InfoLevel, Cli, File, NodeInfo):
+class PrintHookStartLine(InfoLevel, NodeInfo):
     statement: str
     index: int
     total: int
-    truncate: bool
-    report_node_data: Any  # TODO: resolve ParsedHookNode circular import
     code: str = "Q032"
 
     def message(self) -> str:
         msg = f"START hook: {self.statement}"
-        return format_fancy_output_line(msg=msg,
-                                        status='RUN',
-                                        index=self.index,
-                                        total=self.total,
-                                        truncate=self.truncate)
+        return format_fancy_output_line(
+            msg=msg, status="RUN", index=self.index, total=self.total, truncate=True
+        )
 
 
 @dataclass
-class PrintHookEndLine(InfoLevel, Cli, File, NodeInfo):
+class PrintHookEndLine(InfoLevel, NodeInfo):
     statement: str
     status: str
     index: int
     total: int
     execution_time: int
-    truncate: bool
-    report_node_data: Any  # TODO: resolve ParsedHookNode circular import
     code: str = "Q007"
 
     def message(self) -> str:
-        msg = 'OK hook: {}'.format(self.statement)
-        return format_fancy_output_line(msg=msg,
-                                        status=ui.green(self.status),
-                                        index=self.index,
-                                        total=self.total,
-                                        execution_time=self.execution_time,
-                                        truncate=self.truncate)
+        msg = "OK hook: {}".format(self.statement)
+        return format_fancy_output_line(
+            msg=msg,
+            status=ui.green(self.status),
+            index=self.index,
+            total=self.total,
+            execution_time=self.execution_time,
+            truncate=True,
+        )
 
 
 @dataclass
-class SkippingDetails(InfoLevel, Cli, File, NodeInfo):
+class SkippingDetails(InfoLevel, NodeInfo):
     resource_type: str
     schema: str
     node_name: str
     index: int
     total: int
-    report_node_data: ParsedModelNode
     code: str = "Q034"
 
     def message(self) -> str:
         if self.resource_type in NodeType.refable():
-            msg = f'SKIP relation {self.schema}.{self.node_name}'
+            msg = f"SKIP relation {self.schema}.{self.node_name}"
         else:
-            msg = f'SKIP {self.resource_type} {self.node_name}'
-        return format_fancy_output_line(msg=msg,
-                                        status=ui.yellow('SKIP'),
-                                        index=self.index,
-                                        total=self.total)
+            msg = f"SKIP {self.resource_type} {self.node_name}"
+        return format_fancy_output_line(
+            msg=msg, status=ui.yellow("SKIP"), index=self.index, total=self.total
+        )
 
 
 @dataclass
-class PrintErrorTestResult(ErrorLevel, Cli, File, NodeInfo):
+class PrintErrorTestResult(ErrorLevel, NodeInfo):
     name: str
     index: int
     num_models: int
     execution_time: int
-    report_node_data: ParsedModelNode
     code: str = "Q008"
 
     def message(self) -> str:
         info = "ERROR"
         msg = f"{info} {self.name}"
-        return format_fancy_output_line(msg=msg,
-                                        status=ui.red(info),
-                                        index=self.index,
-                                        total=self.num_models,
-                                        execution_time=self.execution_time)
+        return format_fancy_output_line(
+            msg=msg,
+            status=ui.red(info),
+            index=self.index,
+            total=self.num_models,
+            execution_time=self.execution_time,
+        )
 
 
 @dataclass
-class PrintPassTestResult(InfoLevel, Cli, File, NodeInfo):
+class PrintPassTestResult(InfoLevel, NodeInfo):
     name: str
     index: int
     num_models: int
     execution_time: int
-    report_node_data: ParsedModelNode
     code: str = "Q009"
 
     def message(self) -> str:
         info = "PASS"
         msg = f"{info} {self.name}"
-        return format_fancy_output_line(msg=msg,
-                                        status=ui.green(info),
-                                        index=self.index,
-                                        total=self.num_models,
-                                        execution_time=self.execution_time)
+        return format_fancy_output_line(
+            msg=msg,
+            status=ui.green(info),
+            index=self.index,
+            total=self.num_models,
+            execution_time=self.execution_time,
+        )
 
 
 @dataclass
-class PrintWarnTestResult(WarnLevel, Cli, File, NodeInfo):
+class PrintWarnTestResult(WarnLevel, NodeInfo):
     name: str
     index: int
     num_models: int
     execution_time: int
-    failures: List[str]
-    report_node_data: ParsedModelNode
+    failures: int
     code: str = "Q010"
 
     def message(self) -> str:
-        info = f'WARN {self.failures}'
+        info = f"WARN {self.failures}"
         msg = f"{info} {self.name}"
-        return format_fancy_output_line(msg=msg,
-                                        status=ui.yellow(info),
-                                        index=self.index,
-                                        total=self.num_models,
-                                        execution_time=self.execution_time)
+        return format_fancy_output_line(
+            msg=msg,
+            status=ui.yellow(info),
+            index=self.index,
+            total=self.num_models,
+            execution_time=self.execution_time,
+        )
 
 
 @dataclass
-class PrintFailureTestResult(ErrorLevel, Cli, File, NodeInfo):
+class PrintFailureTestResult(ErrorLevel, NodeInfo):
     name: str
     index: int
     num_models: int
     execution_time: int
-    failures: List[str]
-    report_node_data: ParsedModelNode
+    failures: int
     code: str = "Q011"
 
     def message(self) -> str:
-        info = f'FAIL {self.failures}'
+        info = f"FAIL {self.failures}"
         msg = f"{info} {self.name}"
-        return format_fancy_output_line(msg=msg,
-                                        status=ui.red(info),
-                                        index=self.index,
-                                        total=self.num_models,
-                                        execution_time=self.execution_time)
+        return format_fancy_output_line(
+            msg=msg,
+            status=ui.red(info),
+            index=self.index,
+            total=self.num_models,
+            execution_time=self.execution_time,
+        )
 
 
 @dataclass
-class PrintSkipBecauseError(ErrorLevel, Cli, File):
+class PrintSkipBecauseError(ErrorLevel):
     schema: str
     relation: str
     index: int
@@ -1886,232 +1824,238 @@ class PrintSkipBecauseError(ErrorLevel, Cli, File):
     code: str = "Z034"
 
     def message(self) -> str:
-        msg = f'SKIP relation {self.schema}.{self.relation} due to ephemeral model error'
-        return format_fancy_output_line(msg=msg,
-                                        status=ui.red('ERROR SKIP'),
-                                        index=self.index,
-                                        total=self.total)
+        msg = f"SKIP relation {self.schema}.{self.relation} due to ephemeral model error"
+        return format_fancy_output_line(
+            msg=msg, status=ui.red("ERROR SKIP"), index=self.index, total=self.total
+        )
 
 
 @dataclass
-class PrintModelErrorResultLine(ErrorLevel, Cli, File, NodeInfo):
+class PrintModelErrorResultLine(ErrorLevel, NodeInfo):
     description: str
     status: str
     index: int
     total: int
     execution_time: int
-    report_node_data: ParsedModelNode
     code: str = "Q035"
 
     def message(self) -> str:
         info = "ERROR creating"
         msg = f"{info} {self.description}"
-        return format_fancy_output_line(msg=msg,
-                                        status=ui.red(self.status.upper()),
-                                        index=self.index,
-                                        total=self.total,
-                                        execution_time=self.execution_time)
+        return format_fancy_output_line(
+            msg=msg,
+            status=ui.red(self.status.upper()),
+            index=self.index,
+            total=self.total,
+            execution_time=self.execution_time,
+        )
 
 
 @dataclass
-class PrintModelResultLine(InfoLevel, Cli, File, NodeInfo):
+class PrintModelResultLine(InfoLevel, NodeInfo):
     description: str
     status: str
     index: int
     total: int
     execution_time: int
-    report_node_data: ParsedModelNode
     code: str = "Q012"
 
     def message(self) -> str:
         info = "OK created"
         msg = f"{info} {self.description}"
-        return format_fancy_output_line(msg=msg,
-                                        status=ui.green(self.status),
-                                        index=self.index,
-                                        total=self.total,
-                                        execution_time=self.execution_time)
+        return format_fancy_output_line(
+            msg=msg,
+            status=ui.green(self.status),
+            index=self.index,
+            total=self.total,
+            execution_time=self.execution_time,
+        )
 
 
 @dataclass
-class PrintSnapshotErrorResultLine(ErrorLevel, Cli, File, NodeInfo):
+class PrintSnapshotErrorResultLine(ErrorLevel, NodeInfo):
     status: str
     description: str
-    cfg: Dict
+    cfg: Dict[str, Any]
     index: int
     total: int
     execution_time: int
-    report_node_data: ParsedModelNode
     code: str = "Q013"
 
     def message(self) -> str:
-        info = 'ERROR snapshotting'
+        info = "ERROR snapshotting"
         msg = "{info} {description}".format(info=info, description=self.description, **self.cfg)
-        return format_fancy_output_line(msg=msg,
-                                        status=ui.red(self.status.upper()),
-                                        index=self.index,
-                                        total=self.total,
-                                        execution_time=self.execution_time)
+        return format_fancy_output_line(
+            msg=msg,
+            status=ui.red(self.status.upper()),
+            index=self.index,
+            total=self.total,
+            execution_time=self.execution_time,
+        )
 
 
 @dataclass
-class PrintSnapshotResultLine(InfoLevel, Cli, File, NodeInfo):
+class PrintSnapshotResultLine(InfoLevel, NodeInfo):
     status: str
     description: str
-    cfg: Dict
+    cfg: Dict[str, Any]
     index: int
     total: int
     execution_time: int
-    report_node_data: ParsedModelNode
     code: str = "Q014"
 
     def message(self) -> str:
-        info = 'OK snapshotted'
+        info = "OK snapshotted"
         msg = "{info} {description}".format(info=info, description=self.description, **self.cfg)
-        return format_fancy_output_line(msg=msg,
-                                        status=ui.green(self.status),
-                                        index=self.index,
-                                        total=self.total,
-                                        execution_time=self.execution_time)
+        return format_fancy_output_line(
+            msg=msg,
+            status=ui.green(self.status),
+            index=self.index,
+            total=self.total,
+            execution_time=self.execution_time,
+        )
 
 
 @dataclass
-class PrintSeedErrorResultLine(ErrorLevel, Cli, File, NodeInfo):
+class PrintSeedErrorResultLine(ErrorLevel, NodeInfo):
     status: str
     index: int
     total: int
     execution_time: int
     schema: str
     relation: str
-    report_node_data: ParsedModelNode
     code: str = "Q015"
 
     def message(self) -> str:
-        info = 'ERROR loading'
+        info = "ERROR loading"
         msg = f"{info} seed file {self.schema}.{self.relation}"
-        return format_fancy_output_line(msg=msg,
-                                        status=ui.red(self.status.upper()),
-                                        index=self.index,
-                                        total=self.total,
-                                        execution_time=self.execution_time)
+        return format_fancy_output_line(
+            msg=msg,
+            status=ui.red(self.status.upper()),
+            index=self.index,
+            total=self.total,
+            execution_time=self.execution_time,
+        )
 
 
 @dataclass
-class PrintSeedResultLine(InfoLevel, Cli, File, NodeInfo):
+class PrintSeedResultLine(InfoLevel, NodeInfo):
     status: str
     index: int
     total: int
     execution_time: int
     schema: str
     relation: str
-    report_node_data: ParsedModelNode
     code: str = "Q016"
 
     def message(self) -> str:
-        info = 'OK loaded'
+        info = "OK loaded"
         msg = f"{info} seed file {self.schema}.{self.relation}"
-        return format_fancy_output_line(msg=msg,
-                                        status=ui.green(self.status),
-                                        index=self.index,
-                                        total=self.total,
-                                        execution_time=self.execution_time)
+        return format_fancy_output_line(
+            msg=msg,
+            status=ui.green(self.status),
+            index=self.index,
+            total=self.total,
+            execution_time=self.execution_time,
+        )
 
 
 @dataclass
-class PrintHookEndErrorLine(ErrorLevel, Cli, File, NodeInfo):
+class PrintHookEndErrorLine(ErrorLevel, NodeInfo):
     source_name: str
     table_name: str
     index: int
     total: int
     execution_time: int
-    report_node_data: ParsedHookNode
     code: str = "Q017"
 
     def message(self) -> str:
-        info = 'ERROR'
+        info = "ERROR"
         msg = f"{info} freshness of {self.source_name}.{self.table_name}"
-        return format_fancy_output_line(msg=msg,
-                                        status=ui.red(info),
-                                        index=self.index,
-                                        total=self.total,
-                                        execution_time=self.execution_time)
+        return format_fancy_output_line(
+            msg=msg,
+            status=ui.red(info),
+            index=self.index,
+            total=self.total,
+            execution_time=self.execution_time,
+        )
 
 
 @dataclass
-class PrintHookEndErrorStaleLine(ErrorLevel, Cli, File, NodeInfo):
+class PrintHookEndErrorStaleLine(ErrorLevel, NodeInfo):
     source_name: str
     table_name: str
     index: int
     total: int
     execution_time: int
-    report_node_data: ParsedHookNode
     code: str = "Q018"
 
     def message(self) -> str:
-        info = 'ERROR STALE'
+        info = "ERROR STALE"
         msg = f"{info} freshness of {self.source_name}.{self.table_name}"
-        return format_fancy_output_line(msg=msg,
-                                        status=ui.red(info),
-                                        index=self.index,
-                                        total=self.total,
-                                        execution_time=self.execution_time)
+        return format_fancy_output_line(
+            msg=msg,
+            status=ui.red(info),
+            index=self.index,
+            total=self.total,
+            execution_time=self.execution_time,
+        )
 
 
 @dataclass
-class PrintHookEndWarnLine(WarnLevel, Cli, File, NodeInfo):
+class PrintHookEndWarnLine(WarnLevel, NodeInfo):
     source_name: str
     table_name: str
     index: int
     total: int
     execution_time: int
-    report_node_data: ParsedHookNode
     code: str = "Q019"
 
     def message(self) -> str:
-        info = 'WARN'
+        info = "WARN"
         msg = f"{info} freshness of {self.source_name}.{self.table_name}"
-        return format_fancy_output_line(msg=msg,
-                                        status=ui.yellow(info),
-                                        index=self.index,
-                                        total=self.total,
-                                        execution_time=self.execution_time)
+        return format_fancy_output_line(
+            msg=msg,
+            status=ui.yellow(info),
+            index=self.index,
+            total=self.total,
+            execution_time=self.execution_time,
+        )
 
 
 @dataclass
-class PrintHookEndPassLine(InfoLevel, Cli, File, NodeInfo):
+class PrintHookEndPassLine(InfoLevel, NodeInfo):
     source_name: str
     table_name: str
     index: int
     total: int
     execution_time: int
-    report_node_data: ParsedHookNode
     code: str = "Q020"
 
     def message(self) -> str:
-        info = 'PASS'
+        info = "PASS"
         msg = f"{info} freshness of {self.source_name}.{self.table_name}"
-        return format_fancy_output_line(msg=msg,
-                                        status=ui.green(info),
-                                        index=self.index,
-                                        total=self.total,
-                                        execution_time=self.execution_time)
+        return format_fancy_output_line(
+            msg=msg,
+            status=ui.green(info),
+            index=self.index,
+            total=self.total,
+            execution_time=self.execution_time,
+        )
 
 
 @dataclass
-class PrintCancelLine(ErrorLevel, Cli, File):
+class PrintCancelLine(ErrorLevel):
     conn_name: str
     code: str = "Q021"
 
     def message(self) -> str:
-        msg = 'CANCEL query {}'.format(self.conn_name)
-        return format_fancy_output_line(msg=msg,
-                                        status=ui.red('CANCEL'),
-                                        index=None,
-                                        total=None)
+        msg = "CANCEL query {}".format(self.conn_name)
+        return format_fancy_output_line(msg=msg, status=ui.red("CANCEL"), index=None, total=None)
 
 
 @dataclass
-class DefaultSelector(InfoLevel, Cli, File):
+class DefaultSelector(InfoLevel):
     name: str
     code: str = "Q022"
 
@@ -2120,9 +2064,8 @@ class DefaultSelector(InfoLevel, Cli, File):
 
 
 @dataclass
-class NodeStart(DebugLevel, Cli, File, NodeInfo):
+class NodeStart(DebugLevel, NodeInfo):
     unique_id: str
-    report_node_data: ParsedModelNode
     code: str = "Q023"
 
     def message(self) -> str:
@@ -2130,34 +2073,32 @@ class NodeStart(DebugLevel, Cli, File, NodeInfo):
 
 
 @dataclass
-class NodeFinished(DebugLevel, Cli, File, NodeInfo):
+class NodeFinished(DebugLevel, NodeInfo):
     unique_id: str
-    report_node_data: ParsedModelNode
-    run_result: RunResult
+    # The following isn't a RunResult class because we run into circular imports
+    run_result: Dict[str, Any]
     code: str = "Q024"
 
     def message(self) -> str:
         return f"Finished running node {self.unique_id}"
 
-    @classmethod
-    def asdict(cls, data: list) -> dict:
-        return dict((k, str(v)) for k, v in data)
-
 
 @dataclass
-class QueryCancelationUnsupported(InfoLevel, Cli, File):
+class QueryCancelationUnsupported(InfoLevel):
     type: str
     code: str = "Q025"
 
     def message(self) -> str:
-        msg = (f"The {self.type} adapter does not support query "
-               "cancellation. Some queries may still be "
-               "running!")
+        msg = (
+            f"The {self.type} adapter does not support query "
+            "cancellation. Some queries may still be "
+            "running!"
+        )
         return ui.yellow(msg)
 
 
 @dataclass
-class ConcurrencyLine(InfoLevel, Cli, File):
+class ConcurrencyLine(InfoLevel):
     num_threads: int
     target_name: str
     code: str = "Q026"
@@ -2167,9 +2108,8 @@ class ConcurrencyLine(InfoLevel, Cli, File):
 
 
 @dataclass
-class NodeCompiling(DebugLevel, Cli, File, NodeInfo):
+class NodeCompiling(DebugLevel, NodeInfo):
     unique_id: str
-    report_node_data: ParsedModelNode
     code: str = "Q030"
 
     def message(self) -> str:
@@ -2177,9 +2117,8 @@ class NodeCompiling(DebugLevel, Cli, File, NodeInfo):
 
 
 @dataclass
-class NodeExecuting(DebugLevel, Cli, File, NodeInfo):
+class NodeExecuting(DebugLevel, NodeInfo):
     unique_id: str
-    report_node_data: ParsedModelNode
     code: str = "Q031"
 
     def message(self) -> str:
@@ -2187,7 +2126,7 @@ class NodeExecuting(DebugLevel, Cli, File, NodeInfo):
 
 
 @dataclass
-class StarterProjectPath(DebugLevel, Cli, File):
+class StarterProjectPath(DebugLevel):
     dir: str
     code: str = "A017"
 
@@ -2196,7 +2135,7 @@ class StarterProjectPath(DebugLevel, Cli, File):
 
 
 @dataclass
-class ConfigFolderDirectory(InfoLevel, Cli, File):
+class ConfigFolderDirectory(InfoLevel):
     dir: str
     code: str = "A018"
 
@@ -2205,7 +2144,7 @@ class ConfigFolderDirectory(InfoLevel, Cli, File):
 
 
 @dataclass
-class NoSampleProfileFound(InfoLevel, Cli, File):
+class NoSampleProfileFound(InfoLevel):
     adapter: str
     code: str = "A019"
 
@@ -2214,43 +2153,49 @@ class NoSampleProfileFound(InfoLevel, Cli, File):
 
 
 @dataclass
-class ProfileWrittenWithSample(InfoLevel, Cli, File):
+class ProfileWrittenWithSample(InfoLevel):
     name: str
     path: str
     code: str = "A020"
 
     def message(self) -> str:
-        return (f"Profile {self.name} written to {self.path} "
-                "using target's sample configuration. Once updated, you'll be able to "
-                "start developing with dbt.")
+        return (
+            f"Profile {self.name} written to {self.path} "
+            "using target's sample configuration. Once updated, you'll be able to "
+            "start developing with dbt."
+        )
 
 
 @dataclass
-class ProfileWrittenWithTargetTemplateYAML(InfoLevel, Cli, File):
+class ProfileWrittenWithTargetTemplateYAML(InfoLevel):
     name: str
     path: str
     code: str = "A021"
 
     def message(self) -> str:
-        return (f"Profile {self.name} written to {self.path} using target's "
-                "profile_template.yml and your supplied values. Run 'dbt debug' to "
-                "validate the connection.")
+        return (
+            f"Profile {self.name} written to {self.path} using target's "
+            "profile_template.yml and your supplied values. Run 'dbt debug' to "
+            "validate the connection."
+        )
 
 
 @dataclass
-class ProfileWrittenWithProjectTemplateYAML(InfoLevel, Cli, File):
+class ProfileWrittenWithProjectTemplateYAML(InfoLevel):
     name: str
     path: str
     code: str = "A022"
 
     def message(self) -> str:
-        return (f"Profile {self.name} written to {self.path} using project's "
-                "profile_template.yml and your supplied values. Run 'dbt debug' to "
-                "validate the connection.")
+        return (
+            f"Profile {self.name} written to {self.path} using project's "
+            "profile_template.yml and your supplied values. Run 'dbt debug' to "
+            "validate the connection."
+        )
 
 
 @dataclass
-class SettingUpProfile(InfoLevel, Cli, File):
+class SettingUpProfile(InfoLevel):
     code: str = "A023"
 
     def message(self) -> str:
@@ -2258,7 +2203,7 @@ class SettingUpProfile(InfoLevel, Cli, File):
 
 
 @dataclass
-class InvalidProfileTemplateYAML(InfoLevel, Cli, File):
+class InvalidProfileTemplateYAML(InfoLevel):
     code: str = "A024"
 
     def message(self) -> str:
@@ -2266,7 +2211,7 @@ class InvalidProfileTemplateYAML(InfoLevel, Cli, File):
 
 
 @dataclass
-class ProjectNameAlreadyExists(InfoLevel, Cli, File):
+class ProjectNameAlreadyExists(InfoLevel):
     name: str
     code: str = "A025"
 
@@ -2275,7 +2220,7 @@ class ProjectNameAlreadyExists(InfoLevel, Cli, File):
 
 
 @dataclass
-class GetAddendum(InfoLevel, Cli, File):
+class GetAddendum(InfoLevel):
     msg: str
     code: str = "A026"
 
@@ -2284,7 +2229,7 @@ class GetAddendum(InfoLevel, Cli, File):
 
 
 @dataclass
-class DepsSetDownloadDirectory(DebugLevel, Cli, File):
+class DepsSetDownloadDirectory(DebugLevel):
     path: str
     code: str = "A027"
 
@@ -2293,33 +2238,35 @@ class DepsSetDownloadDirectory(DebugLevel, Cli, File):
 
 
 @dataclass
-class EnsureGitInstalled(ErrorLevel, Cli, File):
+class EnsureGitInstalled(ErrorLevel):
     code: str = "Z036"
 
     def message(self) -> str:
-        return ('Make sure git is installed on your machine. More '
-                'information: '
-                'https://docs.getdbt.com/docs/package-management')
+        return (
+            "Make sure git is installed on your machine. More "
+            "information: "
+            "https://docs.getdbt.com/docs/package-management"
+        )
 
 
 @dataclass
-class DepsCreatingLocalSymlink(DebugLevel, Cli, File):
+class DepsCreatingLocalSymlink(DebugLevel):
     code: str = "Z037"
 
     def message(self) -> str:
-        return '  Creating symlink to local dependency.'
+        return "  Creating symlink to local dependency."
 
 
 @dataclass
-class DepsSymlinkNotAvailable(DebugLevel, Cli, File):
+class DepsSymlinkNotAvailable(DebugLevel):
     code: str = "Z038"
 
     def message(self) -> str:
-        return '  Symlinks are not available on this OS, copying dependency.'
+        return "  Symlinks are not available on this OS, copying dependency."
 
 
 @dataclass
-class FoundStats(InfoLevel, Cli, File):
+class FoundStats(InfoLevel):
     stat_line: str
     code: str = "W006"
 
@@ -2329,7 +2276,7 @@ class FoundStats(InfoLevel, Cli, File):
 
 # TODO: should this have NodeInfo on it?
 @dataclass
-class CompilingNode(DebugLevel, Cli, File):
+class CompilingNode(DebugLevel):
     unique_id: str
     code: str = "Q027"
 
@@ -2338,7 +2285,7 @@ class CompilingNode(DebugLevel, Cli, File):
 
 
 @dataclass
-class WritingInjectedSQLForNode(DebugLevel, Cli, File):
+class WritingInjectedSQLForNode(DebugLevel):
     unique_id: str
     code: str = "Q028"
 
@@ -2347,7 +2294,7 @@ class WritingInjectedSQLForNode(DebugLevel, Cli, File):
 
 
 @dataclass
-class DisableTracking(WarnLevel, Cli, File):
+class DisableTracking(WarnLevel):
     code: str = "Z039"
 
     def message(self) -> str:
@@ -2355,7 +2302,7 @@ class DisableTracking(WarnLevel, Cli, File):
 
 
 @dataclass
-class SendingEvent(DebugLevel, Cli, File):
+class SendingEvent(DebugLevel):
     kwargs: str
     code: str = "Z040"
 
@@ -2364,7 +2311,7 @@ class SendingEvent(DebugLevel, Cli, File):
 
 
 @dataclass
-class SendEventFailure(DebugLevel, Cli, File):
+class SendEventFailure(DebugLevel):
     code: str = "Z041"
 
     def message(self) -> str:
@@ -2372,7 +2319,7 @@ class SendEventFailure(DebugLevel, Cli, File):
 
 
 @dataclass
-class FlushEvents(DebugLevel, Cli):
+class FlushEvents(DebugLevel, NoFile):
     code: str = "Z042"
 
     def message(self) -> str:
@@ -2380,7 +2327,7 @@ class FlushEvents(DebugLevel, Cli):
 
 
 @dataclass
-class FlushEventsFailure(DebugLevel, Cli):
+class FlushEventsFailure(DebugLevel, NoFile):
     code: str = "Z043"
 
     def message(self) -> str:
@@ -2388,7 +2335,7 @@ class FlushEventsFailure(DebugLevel, Cli):
 
 
 @dataclass
-class TrackingInitializeFailure(ShowException, DebugLevel, Cli, File):
+class TrackingInitializeFailure(ShowException, DebugLevel):
     code: str = "Z044"
 
     def message(self) -> str:
@@ -2396,7 +2343,7 @@ class TrackingInitializeFailure(ShowException, DebugLevel, Cli, File):
 
 
 @dataclass
-class RetryExternalCall(DebugLevel, Cli, File):
+class RetryExternalCall(DebugLevel):
     attempt: int
     max: int
     code: str = "Z045"
@@ -2406,7 +2353,7 @@ class RetryExternalCall(DebugLevel, Cli, File):
 
 
 @dataclass
-class GeneralWarningMsg(WarnLevel, Cli, File):
+class GeneralWarningMsg(WarnLevel):
     msg: str
     log_fmt: str
     code: str = "Z046"
@@ -2418,7 +2365,7 @@ class GeneralWarningMsg(WarnLevel, Cli, File):
 
 
 @dataclass
-class GeneralWarningException(WarnLevel, Cli, File):
+class GeneralWarningException(WarnLevel):
     exc: Exception
     log_fmt: str
     code: str = "Z047"
@@ -2430,7 +2377,7 @@ class GeneralWarningException(WarnLevel, Cli, File):
 
 
 @dataclass
-class EventBufferFull(WarnLevel, Cli, File):
+class EventBufferFull(WarnLevel):
     code: str = "Z048"
 
     def message(self) -> str:
@@ -2444,11 +2391,11 @@ class EventBufferFull(WarnLevel, Cli, File):
 #
 # TODO remove these lines once we run mypy everywhere.
 if 1 == 0:
-    MainReportVersion('')
+    MainReportVersion(v="")
     MainKeyboardInterrupt()
-    MainEncounteredError(BaseException(''))
-    MainStackTrace('')
-    MainTrackingUserState('')
+    MainEncounteredError(e=BaseException(""))
+    MainStackTrace(stack_trace="")
+    MainTrackingUserState(user_state="")
     ParsingStart()
     ParsingCompiling()
     ParsingWritingManifest()
@@ -2471,9 +2418,7 @@ if 1 == 0:
     SystemExecutingCmd(cmd=[""])
     SystemStdOutMsg(bmsg=b"")
     SystemStdErrMsg(bmsg=b"")
-    SelectorReportInvalidSelector(
-        selector_methods={"": ""}, spec_method="", raw_spec=""
-    )
+    SelectorReportInvalidSelector(valid_selectors="", spec_method="", raw_spec="")
     MacroEventInfo(msg="")
     MacroEventDebug(msg="")
     NewConnection(conn_type="", conn_name="")
@@ -2490,9 +2435,11 @@ if 1 == 0:
     SQLQuery(conn_name="", sql="")
     SQLQueryStatus(status="", elapsed=0.1)
     SQLCommit(conn_name="")
-    ColTypeChange(orig_type="", new_type="", table="")
-    SchemaCreation(relation=_make_key(BaseRelation()))
-    SchemaDrop(relation=_make_key(BaseRelation()))
+    ColTypeChange(
+        orig_type="", new_type="", table=_ReferenceKey(database="", schema="", identifier="")
+    )
+    SchemaCreation(relation=_ReferenceKey(database="", schema="", identifier=""))
+    SchemaDrop(relation=_ReferenceKey(database="", schema="", identifier=""))
     UncachedRelation(
         dep_key=_ReferenceKey(database="", schema="", identifier=""),
         ref_key=_ReferenceKey(database="", schema="", identifier=""),
@@ -2501,7 +2448,7 @@ if 1 == 0:
         dep_key=_ReferenceKey(database="", schema="", identifier=""),
         ref_key=_ReferenceKey(database="", schema="", identifier=""),
     )
-    AddRelation(relation=_make_key(_CachedRelation()))
+    AddRelation(relation=_ReferenceKey(database="", schema="", identifier=""))
     DropMissingRelation(relation=_ReferenceKey(database="", schema="", identifier=""))
     DropCascade(
         dropped=_ReferenceKey(database="", schema="", identifier=""),
@@ -2515,282 +2462,278 @@ if 1 == 0:
     TemporaryRelation(key=_ReferenceKey(database="", schema="", identifier=""))
     RenameSchema(
         old_key=_ReferenceKey(database="", schema="", identifier=""),
-        new_key=_ReferenceKey(database="", schema="", identifier="")
+        new_key=_ReferenceKey(database="", schema="", identifier=""),
     )
-    DumpBeforeAddGraph(dict())
-    DumpAfterAddGraph(dict())
-    DumpBeforeRenameSchema(dict())
-    DumpAfterRenameSchema(dict())
-    AdapterImportError(ModuleNotFoundError())
+    DumpBeforeAddGraph(Lazy.defer(lambda: dict()))
+    DumpAfterAddGraph(Lazy.defer(lambda: dict()))
+    DumpBeforeRenameSchema(Lazy.defer(lambda: dict()))
+    DumpAfterRenameSchema(Lazy.defer(lambda: dict()))
+    AdapterImportError(exc=Exception())
     PluginLoadError()
     SystemReportReturnCode(returncode=0)
-    NewConnectionOpening(connection_state='')
+    NewConnectionOpening(connection_state="")
     TimingInfoCollected()
     MergedFromState(nbr_merged=0, sample=[])
-    MissingProfileTarget(profile_name='', target_name='')
-    ProfileLoadError(exc=Exception(''))
-    ProfileNotFound(profile_name='')
+    MissingProfileTarget(profile_name="", target_name="")
     InvalidVarsYAML()
-    GenericTestFileParse(path='')
-    MacroFileParse(path='')
+    GenericTestFileParse(path="")
+    MacroFileParse(path="")
     PartialParsingFullReparseBecauseOfError()
     PartialParsingFile(file_dict={})
-    PartialParsingExceptionFile(file='')
+    PartialParsingExceptionFile(file="")
     PartialParsingException(exc_info={})
     PartialParsingSkipParsing()
     PartialParsingMacroChangeStartFullParse()
-    ManifestWrongMetadataVersion(version='')
-    PartialParsingVersionMismatch(saved_version='', current_version='')
+    ManifestWrongMetadataVersion(version="")
+    PartialParsingVersionMismatch(saved_version="", current_version="")
     PartialParsingFailedBecauseConfigChange()
     PartialParsingFailedBecauseProfileChange()
     PartialParsingFailedBecauseNewProjectDependency()
     PartialParsingFailedBecauseHashChanged()
-    PartialParsingDeletedMetric('')
-    ParsedFileLoadFailed(path='', exc=Exception(''))
+    PartialParsingDeletedMetric(id="")
+    ParsedFileLoadFailed(path="", exc=Exception(""))
     PartialParseSaveFileNotFound()
-    StaticParserCausedJinjaRendering(path='')
-    UsingExperimentalParser(path='')
-    SampleFullJinjaRendering(path='')
-    StaticParserFallbackJinjaRendering(path='')
-    StaticParsingMacroOverrideDetected(path='')
-    StaticParserSuccess(path='')
-    StaticParserFailure(path='')
-    ExperimentalParserSuccess(path='')
-    ExperimentalParserFailure(path='')
+    StaticParserCausedJinjaRendering(path="")
+    UsingExperimentalParser(path="")
+    SampleFullJinjaRendering(path="")
+    StaticParserFallbackJinjaRendering(path="")
+    StaticParsingMacroOverrideDetected(path="")
+    StaticParserSuccess(path="")
+    StaticParserFailure(path="")
+    ExperimentalParserSuccess(path="")
+    ExperimentalParserFailure(path="")
     PartialParsingEnabled(deleted=0, added=0, changed=0)
-    PartialParsingAddedFile(file_id='')
-    PartialParsingDeletedFile(file_id='')
-    PartialParsingUpdatedFile(file_id='')
-    PartialParsingNodeMissingInSourceFile(source_file='')
-    PartialParsingMissingNodes(file_id='')
-    PartialParsingChildMapMissingUniqueID(unique_id='')
-    PartialParsingUpdateSchemaFile(file_id='')
-    PartialParsingDeletedSource(unique_id='')
-    PartialParsingDeletedExposure(unique_id='')
-    InvalidDisabledSourceInTestNode(msg='')
-    InvalidRefInTestNode(msg='')
-    RunningOperationCaughtError(exc=Exception(''))
-    RunningOperationUncaughtError(exc=Exception(''))
+    PartialParsingAddedFile(file_id="")
+    PartialParsingDeletedFile(file_id="")
+    PartialParsingUpdatedFile(file_id="")
+    PartialParsingNodeMissingInSourceFile(source_file="")
+    PartialParsingMissingNodes(file_id="")
+    PartialParsingChildMapMissingUniqueID(unique_id="")
+    PartialParsingUpdateSchemaFile(file_id="")
+    PartialParsingDeletedSource(unique_id="")
+    PartialParsingDeletedExposure(unique_id="")
+    InvalidDisabledSourceInTestNode(msg="")
+    InvalidRefInTestNode(msg="")
+    RunningOperationCaughtError(exc=Exception(""))
+    RunningOperationUncaughtError(exc=Exception(""))
     DbtProjectError()
-    DbtProjectErrorException(exc=Exception(''))
+    DbtProjectErrorException(exc=Exception(""))
     DbtProfileError()
-    DbtProfileErrorException(exc=Exception(''))
+    DbtProfileErrorException(exc=Exception(""))
     ProfileListTitle()
-    ListSingleProfile(profile='')
+    ListSingleProfile(profile="")
     NoDefinedProfiles()
     ProfileHelpMessage()
-    CatchableExceptionOnRun(exc=Exception(''))
-    InternalExceptionOnRun(build_path='', exc=Exception(''))
-    GenericExceptionOnRun(build_path='', unique_id='', exc='')
-    NodeConnectionReleaseError(node_name='', exc=Exception(''))
-    CheckCleanPath(path='')
-    ConfirmCleanPath(path='')
-    ProtectedCleanPath(path='')
+    CatchableExceptionOnRun(exc=Exception(""))
+    InternalExceptionOnRun(build_path="", exc=Exception(""))
+    GenericExceptionOnRun(build_path="", unique_id="", exc=Exception(""))
+    NodeConnectionReleaseError(node_name="", exc=Exception(""))
+    CheckCleanPath(path="")
+    ConfirmCleanPath(path="")
+    ProtectedCleanPath(path="")
     FinishedCleanPaths()
-    OpenCommand(open_cmd='', profiles_dir='')
+    OpenCommand(open_cmd="", profiles_dir="")
     DepsNoPackagesFound()
-    DepsStartPackageInstall(package_name='')
-    DepsInstallInfo(version_name='')
-    DepsUpdateAvailable(version_latest='')
-    DepsListSubdirectory(subdirectory='')
+    DepsStartPackageInstall(package_name="")
+    DepsInstallInfo(version_name="")
+    DepsUpdateAvailable(version_latest="")
+    DepsListSubdirectory(subdirectory="")
     DepsNotifyUpdatesAvailable(packages=[])
-    DatabaseErrorRunning(hook_type='')
+    DatabaseErrorRunning(hook_type="")
     EmptyLine()
-    HooksRunning(num_hooks=0, hook_type='')
-    HookFinished(stat_line='', execution='')
+    HooksRunning(num_hooks=0, hook_type="")
+    HookFinished(stat_line="", execution="")
     WriteCatalogFailure(num_exceptions=0)
-    CatalogWritten(path='')
+    CatalogWritten(path="")
     CannotGenerateDocs()
     BuildingCatalog()
     CompileComplete()
     FreshnessCheckComplete()
-    ServingDocsPort(address='', port=0)
-    ServingDocsAccessInfo(port='')
+    ServingDocsPort(address="", port=0)
+    ServingDocsAccessInfo(port="")
     ServingDocsExitInfo()
-    SeedHeader(header='')
-    SeedHeaderSeperator(len_header=0)
-    RunResultWarning(resource_type='', node_name='', path='')
-    RunResultFailure(resource_type='', node_name='', path='')
+    SeedHeader(header="")
+    SeedHeaderSeparator(len_header=0)
+    RunResultWarning(resource_type="", node_name="", path="")
+    RunResultFailure(resource_type="", node_name="", path="")
     StatsLine(stats={})
-    RunResultError(msg='')
-    RunResultErrorNoMessage(status='')
-    SQLCompiledPath(path='')
-    CheckNodeTestFailure(relation_name='')
-    FirstRunResultError(msg='')
-    AfterFirstRunResultError(msg='')
+    RunResultError(msg="")
+    RunResultErrorNoMessage(status="")
+    SQLCompiledPath(path="")
+    CheckNodeTestFailure(relation_name="")
+    FirstRunResultError(msg="")
+    AfterFirstRunResultError(msg="")
     EndOfRunSummary(num_errors=0, num_warnings=0, keyboard_interrupt=False)
-    PrintStartLine(description='', index=0, total=0, report_node_data=ParsedModelNode())
+    PrintStartLine(description="", index=0, total=0, node_info={})
     PrintHookStartLine(
-        statement='',
+        statement="",
         index=0,
         total=0,
-        truncate=False,
-        report_node_data=ParsedHookNode()
+        node_info={},
     )
     PrintHookEndLine(
-        statement='',
-        status='',
+        statement="",
+        status="",
         index=0,
         total=0,
         execution_time=0,
-        truncate=False,
-        report_node_data=ParsedHookNode()
+        node_info={},
     )
     SkippingDetails(
-        resource_type='',
-        schema='',
-        node_name='',
+        resource_type="",
+        schema="",
+        node_name="",
         index=0,
         total=0,
-        report_node_data=ParsedModelNode()
+        node_info={},
     )
     PrintErrorTestResult(
-        name='',
+        name="",
         index=0,
         num_models=0,
         execution_time=0,
-        report_node_data=ParsedModelNode()
+        node_info={},
     )
     PrintPassTestResult(
-        name='',
+        name="",
         index=0,
         num_models=0,
         execution_time=0,
-        report_node_data=ParsedModelNode()
+        node_info={},
     )
     PrintWarnTestResult(
-        name='',
+        name="",
         index=0,
         num_models=0,
         execution_time=0,
-        failures=[],
-        report_node_data=ParsedModelNode()
+        failures=0,
+        node_info={},
     )
     PrintFailureTestResult(
-        name='',
+        name="",
         index=0,
         num_models=0,
         execution_time=0,
-        failures=[],
-        report_node_data=ParsedModelNode()
+        failures=0,
+        node_info={},
     )
-    PrintSkipBecauseError(schema='', relation='', index=0, total=0)
+    PrintSkipBecauseError(schema="", relation="", index=0, total=0)
     PrintModelErrorResultLine(
-        description='',
-        status='',
+        description="",
+        status="",
         index=0,
         total=0,
         execution_time=0,
-        report_node_data=ParsedModelNode()
+        node_info={},
     )
     PrintModelResultLine(
-        description='',
-        status='',
+        description="",
+        status="",
         index=0,
         total=0,
         execution_time=0,
-        report_node_data=ParsedModelNode()
+        node_info={},
     )
     PrintSnapshotErrorResultLine(
-        status='',
-        description='',
+        status="",
+        description="",
         cfg={},
         index=0,
         total=0,
         execution_time=0,
-        report_node_data=ParsedModelNode()
+        node_info={},
     )
     PrintSnapshotResultLine(
-        status='',
-        description='',
+        status="",
+        description="",
         cfg={},
         index=0,
         total=0,
         execution_time=0,
-        report_node_data=ParsedModelNode()
+        node_info={},
     )
     PrintSeedErrorResultLine(
-        status='',
+        status="",
         index=0,
         total=0,
         execution_time=0,
-        schema='',
-        relation='',
-        report_node_data=ParsedModelNode()
+        schema="",
+        relation="",
+        node_info={},
     )
     PrintSeedResultLine(
-        status='',
+        status="",
         index=0,
         total=0,
         execution_time=0,
-        schema='',
-        relation='',
-        report_node_data=ParsedModelNode()
+        schema="",
+        relation="",
+        node_info={},
     )
     PrintHookEndErrorLine(
-        source_name='',
-        table_name='',
+        source_name="",
+        table_name="",
         index=0,
         total=0,
         execution_time=0,
-        report_node_data=ParsedHookNode()
+        node_info={},
     )
     PrintHookEndErrorStaleLine(
-        source_name='',
-        table_name='',
+        source_name="",
+        table_name="",
         index=0,
         total=0,
         execution_time=0,
-        report_node_data=ParsedHookNode()
+        node_info={},
     )
     PrintHookEndWarnLine(
-        source_name='',
-        table_name='',
+        source_name="",
+        table_name="",
         index=0,
         total=0,
         execution_time=0,
-        report_node_data=ParsedHookNode()
+        node_info={},
     )
     PrintHookEndPassLine(
-        source_name='',
-        table_name='',
+        source_name="",
+        table_name="",
         index=0,
         total=0,
         execution_time=0,
-        report_node_data=ParsedHookNode()
+        node_info={},
     )
-    PrintCancelLine(conn_name='')
-    DefaultSelector(name='')
-    NodeStart(report_node_data=ParsedModelNode(), unique_id='')
-    NodeFinished(report_node_data=ParsedModelNode(), unique_id='', run_result=RunResult())
-    QueryCancelationUnsupported(type='')
-    ConcurrencyLine(num_threads=0, target_name='')
-    NodeCompiling(report_node_data=ParsedModelNode(), unique_id='')
-    NodeExecuting(report_node_data=ParsedModelNode(), unique_id='')
-    StarterProjectPath(dir='')
-    ConfigFolderDirectory(dir='')
-    NoSampleProfileFound(adapter='')
-    ProfileWrittenWithSample(name='', path='')
-    ProfileWrittenWithTargetTemplateYAML(name='', path='')
-    ProfileWrittenWithProjectTemplateYAML(name='', path='')
+    PrintCancelLine(conn_name="")
+    DefaultSelector(name="")
+    NodeStart(node_info={}, unique_id="")
+    NodeFinished(node_info={}, unique_id="", run_result={})
+    QueryCancelationUnsupported(type="")
+    ConcurrencyLine(num_threads=0, target_name="")
+    NodeCompiling(node_info={}, unique_id="")
+    NodeExecuting(node_info={}, unique_id="")
+    StarterProjectPath(dir="")
+    ConfigFolderDirectory(dir="")
+    NoSampleProfileFound(adapter="")
+    ProfileWrittenWithSample(name="", path="")
+    ProfileWrittenWithTargetTemplateYAML(name="", path="")
+    ProfileWrittenWithProjectTemplateYAML(name="", path="")
     SettingUpProfile()
     InvalidProfileTemplateYAML()
-    ProjectNameAlreadyExists(name='')
-    GetAddendum(msg='')
-    DepsSetDownloadDirectory(path='')
+    ProjectNameAlreadyExists(name="")
+    GetAddendum(msg="")
+    DepsSetDownloadDirectory(path="")
     EnsureGitInstalled()
     DepsCreatingLocalSymlink()
     DepsSymlinkNotAvailable()
-    FoundStats(stat_line='')
-    CompilingNode(unique_id='')
-    WritingInjectedSQLForNode(unique_id='')
+    FoundStats(stat_line="")
+    CompilingNode(unique_id="")
+    WritingInjectedSQLForNode(unique_id="")
     DisableTracking()
-    SendingEvent(kwargs='')
+    SendingEvent(kwargs="")
     SendEventFailure()
     FlushEvents()
     FlushEventsFailure()
     TrackingInitializeFailure()
     RetryExternalCall(attempt=0, max=0)
-    GeneralWarningMsg(msg='', log_fmt='')
-    GeneralWarningException(exc=Exception(''), log_fmt='')
+    GeneralWarningMsg(msg="", log_fmt="")
+    GeneralWarningException(exc=Exception(""), log_fmt="")
     EventBufferFull()
