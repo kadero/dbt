@@ -15,6 +15,7 @@
 - New Dockerfile to support specific db adapters and platforms.  See docker/README.md for details ([#4495](https://github.com/dbt-labs/dbt-core/issues/4495), [#4487](https://github.com/dbt-labs/dbt-core/pull/4487))
 - Allow unique_key to take a list ([#2479](https://github.com/dbt-labs/dbt-core/issues/2479), [#4618](https://github.com/dbt-labs/dbt-core/pull/4618))
 - Add `--quiet` global flag and `print` Jinja function ([#3451](https://github.com/dbt-labs/dbt-core/issues/3451), [#4701](https://github.com/dbt-labs/dbt-core/pull/4701))
+- Add `--defer` flag to dbt compile & dbt docs generate ([#4110](https://github.com/dbt-labs/dbt-core/issues/4110), [#3741](https://github.com/dbt-labs/dbt-core/issues/3741), [#4514](https://github.com/dbt-labs/dbt-core/pull/4514))
 
 ### Fixes
 - User wasn't asked for permission to overwite a profile entry when running init inside an existing project ([#4375](https://github.com/dbt-labs/dbt-core/issues/4375), [#4447](https://github.com/dbt-labs/dbt-core/pull/4447))
@@ -39,7 +40,7 @@ Contributors:
 - [@emartens](https://github.com/ehmartens) ([#4701](https://github.com/dbt-labs/dbt-core/pull/4701))
 - [@mdesmet](https://github.com/mdesmet) ([#4604](https://github.com/dbt-labs/dbt-core/pull/4604))
 - [@kazanzhy](https://github.com/kazanzhy) ([#4545](https://github.com/dbt-labs/dbt-core/pull/4545))
-
+- [@kadero](https://github.com/kadero) ([#4514](https://github.com/dbt-labs/dbt-core/pull/4514))
 
 ## Previous Releases
 
