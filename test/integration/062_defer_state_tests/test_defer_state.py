@@ -61,7 +61,10 @@ class TestDeferState(DBTIntegrationTest):
         self.copy_state()
 
         # defer test, it succeeds
-        self.run_dbt(['compile', '--state', 'state', '--defer'])
+        results, success = self.run_dbt_and_check(['compile', '--state', 'state', '--defer'])
+        self.assertEqual(len(results.results), 6)
+        self.assertEqual(results.results[0].node.name, "seed")
+        self.assertTrue(success)        
 
     def run_and_snapshot_defer(self):
         results = self.run_dbt(['seed'])
