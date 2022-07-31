@@ -5,6 +5,7 @@ import argparse
 import os.path
 import sys
 import traceback
+import warnings
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -118,6 +119,9 @@ class DBTArgumentParser(argparse.ArgumentParser):
 
 
 def main(args=None):
+    # Logbook warnings are ignored so we don't have to fork logbook to support python 3.10.
+    # This _only_ works for regular cli invocations.
+    warnings.filterwarnings("ignore", category=DeprecationWarning, module="logbook")
     if args is None:
         args = sys.argv[1:]
     with log_manager.applicationbound():
@@ -533,7 +537,7 @@ def _build_parse_subparser(subparsers, base_subparser):
         "parse",
         parents=[base_subparser],
         help="""
-        Parsed the project and provides information on performance
+        Parses the project and provides information on performance
         """,
     )
     sub.set_defaults(cls=parse_task.ParseTask, which="parse", rpc_method="parse")
@@ -646,6 +650,22 @@ def _add_common_arguments(*subparsers):
             help="""
             Specify number of threads to use while executing models. Overrides
             settings in profiles.yml.
+            """,
+        )
+        sub.add_argument(
+            "--target-path",
+            required=False,
+            help="""
+            Configure the 'target-path'. Only applies this setting for the
+            current run. Overrides the 'DBT_TARGET_PATH' if it is set.
+            """,
+        )
+        sub.add_argument(
+            "--log-path",
+            required=False,
+            help="""
+            Configure the 'log-path'. Only applies this setting for the
+            current run. Overrides the 'DBT_LOG_PATH' if it is set.
             """,
         )
         _add_version_check(sub)
@@ -1082,6 +1102,36 @@ def parse_args(args, cls=DBTArgumentParser):
         help="""
         Suppress all non-error logging to stdout. Does not affect
         {{ print() }} macro calls.
+        """,
+    )
+
+    p.add_argument(
+        "--no-print",
+        action="store_true",
+        default=None,
+        help="""
+        Suppress all {{ print() }} macro calls.
+        """,
+    )
+
+    schema_cache_flag = p.add_mutually_exclusive_group()
+    schema_cache_flag.add_argument(
+        "--cache-selected-only",
+        action="store_const",
+        const=True,
+        default=None,
+        dest="cache_selected_only",
+        help="""
+        Pre cache database objects relevant to selected resource only.
+        """,
+    )
+    schema_cache_flag.add_argument(
+        "--no-cache-selected-only",
+        action="store_const",
+        const=False,
+        dest="cache_selected_only",
+        help="""
+        Pre cache all database objects related to the project.
         """,
     )
 

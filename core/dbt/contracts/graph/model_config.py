@@ -66,6 +66,7 @@ class MergeBehavior(Metadata):
     Append = 1
     Update = 2
     Clobber = 3
+    DictKeyAppend = 4
 
     @classmethod
     def default_field(cls) -> "MergeBehavior":
@@ -124,6 +125,9 @@ def _listify(value: Any) -> List:
         return [value]
 
 
+# There are two versions of this code. The one here is for config
+# objects, the one in _add_config_call in context_config.py is for
+# config_call_dict dictionaries.
 def _merge_field_value(
     merge_behavior: MergeBehavior,
     self_value: Any,
@@ -141,6 +145,31 @@ def _merge_field_value(
         value = self_value.copy()
         value.update(other_value)
         return value
+    elif merge_behavior == MergeBehavior.DictKeyAppend:
+        if not isinstance(self_value, dict):
+            raise InternalException(f"expected dict, got {self_value}")
+        if not isinstance(other_value, dict):
+            raise InternalException(f"expected dict, got {other_value}")
+        new_dict = {}
+        for key in self_value.keys():
+            new_dict[key] = _listify(self_value[key])
+        for key in other_value.keys():
+            extend = False
+            new_key = key
+            # This might start with a +, to indicate we should extend the list
+            # instead of just clobbering it
+            if new_key.startswith("+"):
+                new_key = key.lstrip("+")
+                extend = True
+            if new_key in new_dict and extend:
+                # extend the list
+                value = other_value[key]
+                new_dict[new_key].extend(_listify(value))
+            else:
+                # clobber the list
+                new_dict[new_key] = _listify(other_value[key])
+        return new_dict
+
     else:
         raise InternalException(f"Got an invalid merge_behavior: {merge_behavior}")
 
@@ -257,6 +286,7 @@ class BaseConfig(AdditionalPropertiesAllowed, Replaceable):
     mergebehavior = {
         "append": ["pre-hook", "pre_hook", "post-hook", "post_hook", "tags"],
         "update": ["quoting", "column_types", "meta"],
+        "dict_key_append": ["grants"],
     }
 
     @classmethod
@@ -335,6 +365,40 @@ class BaseConfig(AdditionalPropertiesAllowed, Replaceable):
 @dataclass
 class SourceConfig(BaseConfig):
     enabled: bool = True
+    # to be implmented to complete CT-201
+    # quoting: Dict[str, Any] = field(
+    #     default_factory=dict,
+    #     metadata=MergeBehavior.Update.meta(),
+    # )
+    # freshness: Optional[Dict[str, Any]] = field(
+    #     default=None,
+    #     metadata=CompareBehavior.Exclude.meta(),
+    # )
+    # loader: Optional[str] = field(
+    #     default=None,
+    #     metadata=CompareBehavior.Exclude.meta(),
+    # )
+    # # TODO what type is this? docs say: "<column_name_or_expression>"
+    # loaded_at_field: Optional[str] = field(
+    #     default=None,
+    #     metadata=CompareBehavior.Exclude.meta(),
+    # )
+    # database: Optional[str] = field(
+    #     default=None,
+    #     metadata=CompareBehavior.Exclude.meta(),
+    # )
+    # schema: Optional[str] = field(
+    #     default=None,
+    #     metadata=CompareBehavior.Exclude.meta(),
+    # )
+    # meta: Dict[str, Any] = field(
+    #     default_factory=dict,
+    #     metadata=MergeBehavior.Update.meta(),
+    # )
+    # tags: Union[List[str], str] = field(
+    #     default_factory=list_str,
+    #     metadata=metas(ShowBehavior.Hide, MergeBehavior.Append, CompareBehavior.Exclude),
+    # )
 
 
 @dataclass
@@ -369,6 +433,7 @@ class NodeConfig(NodeAndTestConfig):
     # Note: if any new fields are added with MergeBehavior, also update the
     # 'mergebehavior' dictionary
     materialized: str = "view"
+    incremental_strategy: Optional[str] = None
     persist_docs: Dict[str, Any] = field(default_factory=dict)
     post_hook: List[Hook] = field(
         default_factory=list,
@@ -393,6 +458,13 @@ class NodeConfig(NodeAndTestConfig):
     # sometimes getting the Union order wrong, causing serialization failures.
     unique_key: Union[str, List[str], None] = None
     on_schema_change: Optional[str] = "ignore"
+    grants: Dict[str, Any] = field(
+        default_factory=dict, metadata=MergeBehavior.DictKeyAppend.meta()
+    )
+    packages: List[str] = field(
+        default_factory=list,
+        metadata=MergeBehavior.Append.meta(),
+    )
 
     @classmethod
     def __pre_deserialize__(cls, data):

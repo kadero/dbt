@@ -122,9 +122,9 @@ class RuntimeException(RuntimeError, Exception):
 
         result.update(
             {
-                "raw_sql": self.node.raw_sql,
+                "raw_code": self.node.raw_code,
                 # the node isn't always compiled, but if it is, include that!
-                "compiled_sql": getattr(self.node, "compiled_sql", None),
+                "compiled_code": getattr(self.node, "compiled_code", None),
             }
         )
         return result
@@ -203,7 +203,7 @@ class DatabaseException(RuntimeException):
         lines = []
 
         if hasattr(self.node, "build_path") and self.node.build_path:
-            lines.append("compiled SQL at {}".format(self.node.build_path))
+            lines.append("compiled Code at {}".format(self.node.build_path))
 
         return lines + RuntimeException.process_stack(self)
 
@@ -383,10 +383,11 @@ class FailedToConnectException(DatabaseException):
 
 class CommandError(RuntimeException):
     def __init__(self, cwd, cmd, message="Error running command"):
+        cmd_scrubbed = list(scrub_secrets(cmd_txt, env_secrets()) for cmd_txt in cmd)
         super().__init__(message)
         self.cwd = cwd
-        self.cmd = cmd
-        self.args = (cwd, cmd, message)
+        self.cmd = cmd_scrubbed
+        self.args = (cwd, cmd_scrubbed, message)
 
     def __str__(self):
         if len(self.cmd) == 0:
@@ -411,9 +412,9 @@ class CommandResultError(CommandError):
     def __init__(self, cwd, cmd, returncode, stdout, stderr, message="Got a non-zero returncode"):
         super().__init__(cwd, cmd, message)
         self.returncode = returncode
-        self.stdout = stdout
-        self.stderr = stderr
-        self.args = (cwd, cmd, returncode, stdout, stderr, message)
+        self.stdout = scrub_secrets(stdout.decode("utf-8"), env_secrets())
+        self.stderr = scrub_secrets(stderr.decode("utf-8"), env_secrets())
+        self.args = (cwd, self.cmd, returncode, self.stdout, self.stderr, message)
 
     def __str__(self):
         return "{} running: {}".format(self.msg, self.cmd)
@@ -434,6 +435,10 @@ class InvalidSelectorException(RuntimeException):
     def __init__(self, name: str):
         self.name = name
         super().__init__(name)
+
+
+class DuplicateYamlKeyException(CompilationException):
+    pass
 
 
 def raise_compiler_error(msg, node=None) -> NoReturn:
@@ -513,6 +518,12 @@ def invalid_bool_error(got_value, macro_name) -> NoReturn:
 
 def ref_invalid_args(model, args) -> NoReturn:
     raise_compiler_error("ref() takes at most two arguments ({} given)".format(len(args)), model)
+
+
+def metric_invalid_args(model, args) -> NoReturn:
+    raise_compiler_error(
+        "metric() takes at most two arguments ({} given)".format(len(args)), model
+    )
 
 
 def ref_bad_context(model, args) -> NoReturn:
@@ -645,6 +656,23 @@ def source_target_not_found(
     raise_compiler_error(msg, model)
 
 
+def get_metric_not_found_msg(
+    model,
+    target_name: str,
+    target_package: Optional[str],
+) -> str:
+    reason = "was not found"
+    return _get_target_failure_msg(
+        model, target_name, target_package, include_path=True, reason=reason, target_kind="metric"
+    )
+
+
+def metric_target_not_found(metric, target_name: str, target_package: Optional[str]) -> NoReturn:
+    msg = get_metric_not_found_msg(metric, target_name, target_package)
+
+    raise_compiler_error(msg, metric)
+
+
 def dependency_not_found(model, target_model_name):
     raise_compiler_error(
         "'{}' depends on '{}' which is not in the graph!".format(
@@ -704,7 +732,6 @@ def missing_materialization(model, adapter_type):
 
 def bad_package_spec(repo, spec, error_message):
     msg = "Error checking out spec='{}' for repo {}\n{}".format(spec, repo, error_message)
-
     raise InternalException(scrub_secrets(msg, env_secrets()))
 
 
@@ -838,31 +865,47 @@ def raise_duplicate_macro_name(node_1, node_2, namespace) -> NoReturn:
 
 def raise_duplicate_resource_name(node_1, node_2):
     duped_name = node_1.name
+    node_type = NodeType(node_1.resource_type)
+    pluralized = (
+        node_type.pluralize()
+        if node_1.resource_type == node_2.resource_type
+        else "resources"  # still raise if ref() collision, e.g. model + seed
+    )
 
-    if node_1.resource_type in NodeType.refable():
-        get_func = 'ref("{}")'.format(duped_name)
-    elif node_1.resource_type == NodeType.Source:
+    action = "looking for"
+    # duplicate 'ref' targets
+    if node_type in NodeType.refable():
+        formatted_name = f'ref("{duped_name}")'
+    # duplicate sources
+    elif node_type == NodeType.Source:
         duped_name = node_1.get_full_source_name()
-        get_func = node_1.get_source_representation()
-    elif node_1.resource_type == NodeType.Documentation:
-        get_func = 'doc("{}")'.format(duped_name)
-    elif node_1.resource_type == NodeType.Test and "schema" in node_1.tags:
-        return
+        formatted_name = node_1.get_source_representation()
+    # duplicate docs blocks
+    elif node_type == NodeType.Documentation:
+        formatted_name = f'doc("{duped_name}")'
+    # duplicate generic tests
+    elif node_type == NodeType.Test and hasattr(node_1, "test_metadata"):
+        column_name = f'column "{node_1.column_name}" in ' if node_1.column_name else ""
+        model_name = node_1.file_key_name
+        duped_name = f'{node_1.name}" defined on {column_name}"{model_name}'
+        action = "running"
+        formatted_name = "tests"
+    # all other resource types
     else:
-        get_func = '"{}"'.format(duped_name)
+        formatted_name = duped_name
 
+    # should this be raise_parsing_error instead?
     raise_compiler_error(
-        'dbt found two resources with the name "{}". Since these resources '
-        "have the same name,\ndbt will be unable to find the correct resource "
-        "when {} is used. To fix this,\nchange the name of one of "
-        "these resources:\n- {} ({})\n- {} ({})".format(
-            duped_name,
-            get_func,
-            node_1.unique_id,
-            node_1.original_file_path,
-            node_2.unique_id,
-            node_2.original_file_path,
-        )
+        f"""
+dbt found two {pluralized} with the name "{duped_name}".
+
+Since these resources have the same name, dbt will be unable to find the correct resource
+when {action} {formatted_name}.
+
+To fix this, change the name of one of these resources:
+- {node_1.unique_id} ({node_1.original_file_path})
+- {node_2.unique_id} ({node_2.original_file_path})
+    """.strip()
     )
 
 
@@ -887,7 +930,8 @@ def raise_ambiguous_alias(node_1, node_2, duped_name=None):
 def raise_ambiguous_catalog_match(unique_id, match_1, match_2):
     def get_match_string(match):
         return "{}.{}".format(
-            match.get("metadata", {}).get("schema"), match.get("metadata", {}).get("name")
+            match.get("metadata", {}).get("schema"),
+            match.get("metadata", {}).get("name"),
         )
 
     raise_compiler_error(
@@ -966,11 +1010,11 @@ def raise_duplicate_source_patch_name(patch_1, patch_2):
     )
 
 
-def raise_invalid_schema_yml_version(path, issue):
+def raise_invalid_property_yml_version(path, issue):
     raise_compiler_error(
-        "The schema file at {} is invalid because {}. Please consult the "
-        "documentation for more information on schema.yml syntax:\n\n"
-        "https://docs.getdbt.com/docs/schemayml-files".format(path, issue)
+        "The yml property file at {} is invalid because {}. Please consult the "
+        "documentation for more information on yml property file syntax:\n\n"
+        "https://docs.getdbt.com/reference/configs-and-properties".format(path, issue)
     )
 
 
@@ -1048,7 +1092,7 @@ CONTEXT_EXPORTS = {
         raise_dependency_error,
         raise_duplicate_patch_name,
         raise_duplicate_resource_name,
-        raise_invalid_schema_yml_version,
+        raise_invalid_property_yml_version,
         raise_not_implemented,
         relation_wrong_type,
     ]

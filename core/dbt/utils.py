@@ -17,7 +17,7 @@ from pathlib import PosixPath, WindowsPath
 from contextlib import contextmanager
 from dbt.exceptions import ConnectionException
 from dbt.events.functions import fire_event
-from dbt.events.types import RetryExternalCall
+from dbt.events.types import RetryExternalCall, RecordRetryException
 from dbt import flags
 from enum import Enum
 from typing_extensions import Protocol
@@ -261,7 +261,7 @@ def get_hash(model):
 
 
 def get_hashed_contents(model):
-    return hashlib.md5(model.raw_sql.encode("utf-8")).hexdigest()
+    return hashlib.md5(model.raw_code.encode("utf-8")).hexdigest()
 
 
 def flatten_nodes(dep_list):
@@ -315,6 +315,13 @@ def timestring() -> str:
     """Get the current datetime as an RFC 3339-compliant string"""
     # isoformat doesn't include the mandatory trailing 'Z' for UTC.
     return datetime.datetime.utcnow().isoformat() + "Z"
+
+
+def humanize_execution_time(execution_time: int) -> str:
+    minutes, seconds = divmod(execution_time, 60)
+    hours, minutes = divmod(minutes, 60)
+
+    return f" in {int(hours)} hours {int(minutes)} minutes and {seconds:0.2f} seconds"
 
 
 class JSONEncoder(json.JSONEncoder):
@@ -600,22 +607,22 @@ class MultiDict(Mapping[str, Any]):
 
 def _connection_exception_retry(fn, max_attempts: int, attempt: int = 0):
     """Attempts to run a function that makes an external call, if the call fails
-    on a connection error, timeout or decompression issue, it will be tried up to 5 more times.
-    See https://github.com/dbt-labs/dbt-core/issues/4579 for context on this decompression issues
-    specifically.
+    on a Requests exception or decompression issue (ReadError), it will be tried
+    up to 5 more times.  All exceptions that Requests explicitly raises inherit from
+    requests.exceptions.RequestException.  See https://github.com/dbt-labs/dbt-core/issues/4579
+    for context on this decompression issues specifically.
     """
     try:
         return fn()
     except (
-        requests.exceptions.ConnectionError,
-        requests.exceptions.Timeout,
-        requests.exceptions.ContentDecodingError,
+        requests.exceptions.RequestException,
         ReadError,
     ) as exc:
         if attempt <= max_attempts - 1:
+            fire_event(RecordRetryException(exc=exc))
             fire_event(RetryExternalCall(attempt=attempt, max=max_attempts))
             time.sleep(1)
-            _connection_exception_retry(fn, max_attempts, attempt + 1)
+            return _connection_exception_retry(fn, max_attempts, attempt + 1)
         else:
             raise ConnectionException("External connection exception occurred: " + str(exc))
 

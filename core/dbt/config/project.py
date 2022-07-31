@@ -15,7 +15,7 @@ from typing_extensions import Protocol, runtime_checkable
 import hashlib
 import os
 
-from dbt import deprecations
+from dbt import flags, deprecations
 from dbt.clients.system import resolve_path_from_base
 from dbt.clients.system import path_exists
 from dbt.clients.system import load_file_contents
@@ -132,10 +132,21 @@ def _all_source_paths(
     analysis_paths: List[str],
     macro_paths: List[str],
 ) -> List[str]:
-    return list(chain(model_paths, seed_paths, snapshot_paths, analysis_paths, macro_paths))
+    # We need to turn a list of lists into just a list, then convert to a set to
+    # get only unique elements, then back to a list
+    return list(
+        set(list(chain(model_paths, seed_paths, snapshot_paths, analysis_paths, macro_paths)))
+    )
 
 
 T = TypeVar("T")
+
+
+def flag_or(flag: Optional[T], value: Optional[T], default: T) -> T:
+    if flag is None:
+        return value_or(value, default)
+    else:
+        return flag
 
 
 def value_or(value: Optional[T], default: T) -> T:
@@ -352,9 +363,9 @@ class PartialProject(RenderComponents):
 
         docs_paths: List[str] = value_or(cfg.docs_paths, all_source_paths)
         asset_paths: List[str] = value_or(cfg.asset_paths, [])
-        target_path: str = value_or(cfg.target_path, "target")
+        target_path: str = flag_or(flags.TARGET_PATH, cfg.target_path, "target")
         clean_targets: List[str] = value_or(cfg.clean_targets, [target_path])
-        log_path: str = value_or(cfg.log_path, "logs")
+        log_path: str = flag_or(flags.LOG_PATH, cfg.log_path, "logs")
         packages_install_path: str = value_or(cfg.packages_install_path, "dbt_packages")
         # in the default case we'll populate this once we know the adapter type
         # It would be nice to just pass along a Quoting here, but that would

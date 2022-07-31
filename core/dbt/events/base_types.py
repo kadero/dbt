@@ -64,7 +64,7 @@ class Event(metaclass=ABCMeta):
 
     # in theory threads can change so we don't cache them.
     def get_thread_name(self) -> str:
-        return threading.current_thread().getName()
+        return threading.current_thread().name
 
     @classmethod
     def get_invocation_id(cls) -> str:
@@ -105,6 +105,8 @@ class ErrorLevel(EventSerialization, Event):
 
 
 # prevents an event from going to the file
+# This should rarely be used in core code. It is currently
+# only used in integration tests and for the 'clean' command.
 class NoFile:
     pass
 

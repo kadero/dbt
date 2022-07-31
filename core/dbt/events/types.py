@@ -94,7 +94,7 @@ class AdapterEventError(ErrorLevel, AdapterEventBase, ShowException):
 
 
 @dataclass
-class MainKeyboardInterrupt(InfoLevel, NoFile):
+class MainKeyboardInterrupt(InfoLevel):
     code: str = "Z001"
 
     def message(self) -> str:
@@ -102,7 +102,7 @@ class MainKeyboardInterrupt(InfoLevel, NoFile):
 
 
 @dataclass
-class MainEncounteredError(ErrorLevel, NoFile):
+class MainEncounteredError(ErrorLevel):
     e: BaseException
     code: str = "Z002"
 
@@ -111,7 +111,7 @@ class MainEncounteredError(ErrorLevel, NoFile):
 
 
 @dataclass
-class MainStackTrace(DebugLevel, NoFile):
+class MainStackTrace(ErrorLevel):
     stack_trace: str
     code: str = "Z003"
 
@@ -292,6 +292,25 @@ class GitProgressCheckedOutAt(DebugLevel):
 
 
 @dataclass
+class RegistryIndexProgressMakingGETRequest(DebugLevel):
+    url: str
+    code: str = "M022"
+
+    def message(self) -> str:
+        return f"Making package index registry request: GET {self.url}"
+
+
+@dataclass
+class RegistryIndexProgressGETResponse(DebugLevel):
+    url: str
+    resp_code: int
+    code: str = "M023"
+
+    def message(self) -> str:
+        return f"Response from registry index: GET {self.url} {self.resp_code}"
+
+
+@dataclass
 class RegistryProgressMakingGETRequest(DebugLevel):
     url: str
     code: str = "M008"
@@ -308,6 +327,45 @@ class RegistryProgressGETResponse(DebugLevel):
 
     def message(self) -> str:
         return f"Response from registry: GET {self.url} {self.resp_code}"
+
+
+@dataclass
+class RegistryResponseUnexpectedType(DebugLevel):
+    response: str
+    code: str = "M024"
+
+    def message(self) -> str:
+        return f"Response was None: {self.response}"
+
+
+@dataclass
+class RegistryResponseMissingTopKeys(DebugLevel):
+    response: str
+    code: str = "M025"
+
+    def message(self) -> str:
+        # expected/actual keys logged in exception
+        return f"Response missing top level keys: {self.response}"
+
+
+@dataclass
+class RegistryResponseMissingNestedKeys(DebugLevel):
+    response: str
+    code: str = "M026"
+
+    def message(self) -> str:
+        # expected/actual keys logged in exception
+        return f"Response missing nested keys: {self.response}"
+
+
+@dataclass
+class RegistryResponseExtraNestedKeys(DebugLevel):
+    response: str
+    code: str = "M027"
+
+    def message(self) -> str:
+        # expected/actual keys logged in exception
+        return f"Response contained inconsistent keys: {self.response}"
 
 
 # TODO this was actually `logger.exception(...)` not `logger.error(...)`
@@ -726,6 +784,26 @@ class NewConnectionOpening(DebugLevel):
 
     def message(self) -> str:
         return f"Opening a new connection, currently in state {self.connection_state}"
+
+
+@dataclass
+class CodeExecution(DebugLevel):
+    conn_name: Optional[str]
+    code_content: str
+    code: str = "E038"
+
+    def message(self) -> str:
+        return f"On {self.conn_name}: {self.code_content}"
+
+
+@dataclass
+class CodeExecutionStatus(DebugLevel):
+    status: str
+    elapsed: Optional[float]
+    code: str = "E039"
+
+    def message(self) -> str:
+        return f"Execution status: {self.status} in {self.elapsed} seconds"
 
 
 @dataclass
@@ -1295,6 +1373,8 @@ class NodeConnectionReleaseError(ShowException, DebugLevel):
         return "Error releasing connection for node {}: {!s}".format(self.node_name, self.exc)
 
 
+# We don't write "clean" events to the log, because the clean command
+# may have removed the log directory.
 @dataclass
 class CheckCleanPath(InfoLevel, NoFile):
     path: str
@@ -1443,10 +1523,11 @@ class HooksRunning(InfoLevel):
 class HookFinished(InfoLevel):
     stat_line: str
     execution: str
+    execution_time: float
     code: str = "E040"
 
     def message(self) -> str:
-        return f"Finished running {self.stat_line}{self.execution}."
+        return f"Finished running {self.stat_line}{self.execution} ({self.execution_time:0.2f}s)."
 
 
 @dataclass
@@ -1605,7 +1686,7 @@ class SQLCompiledPath(InfoLevel):
     code: str = "Z026"
 
     def message(self) -> str:
-        return f"  compiled SQL at {self.path}"
+        return f"  compiled Code at {self.path}"
 
 
 @dataclass
@@ -2294,11 +2375,15 @@ class WritingInjectedSQLForNode(DebugLevel):
 
 
 @dataclass
-class DisableTracking(WarnLevel):
+class DisableTracking(DebugLevel):
     code: str = "Z039"
 
     def message(self) -> str:
-        return "Error sending message, disabling tracking"
+        return (
+            "Error sending anonymous usage statistics. Disabling tracking for this execution. "
+            "If you wish to permanently disable tracking, see: "
+            "https://docs.getdbt.com/reference/global-configs#send-anonymous-usage-stats."
+        )
 
 
 @dataclass
@@ -2319,7 +2404,7 @@ class SendEventFailure(DebugLevel):
 
 
 @dataclass
-class FlushEvents(DebugLevel, NoFile):
+class FlushEvents(DebugLevel):
     code: str = "Z042"
 
     def message(self) -> str:
@@ -2327,7 +2412,7 @@ class FlushEvents(DebugLevel, NoFile):
 
 
 @dataclass
-class FlushEventsFailure(DebugLevel, NoFile):
+class FlushEventsFailure(DebugLevel):
     code: str = "Z043"
 
     def message(self) -> str:
@@ -2346,7 +2431,7 @@ class TrackingInitializeFailure(ShowException, DebugLevel):
 class RetryExternalCall(DebugLevel):
     attempt: int
     max: int
-    code: str = "Z045"
+    code: str = "M020"
 
     def message(self) -> str:
         return f"Retrying external call. Attempt: {self.attempt} Max attempts: {self.max}"
@@ -2359,9 +2444,7 @@ class GeneralWarningMsg(WarnLevel):
     code: str = "Z046"
 
     def message(self) -> str:
-        if self.log_fmt is not None:
-            return self.log_fmt.format(self.msg)
-        return self.msg
+        return self.log_fmt.format(self.msg) if self.log_fmt is not None else self.msg
 
 
 @dataclass
@@ -2371,9 +2454,7 @@ class GeneralWarningException(WarnLevel):
     code: str = "Z047"
 
     def message(self) -> str:
-        if self.log_fmt is not None:
-            return self.log_fmt.format(str(self.exc))
-        return str(self.exc)
+        return self.log_fmt.format(str(self.exc)) if self.log_fmt is not None else str(self.exc)
 
 
 @dataclass
@@ -2381,7 +2462,19 @@ class EventBufferFull(WarnLevel):
     code: str = "Z048"
 
     def message(self) -> str:
-        return "Internal event buffer full. Earliest events will be dropped (FIFO)."
+        return (
+            "Internal logging/event buffer full."
+            "Earliest logs/events will be dropped as new ones are fired (FIFO)."
+        )
+
+
+@dataclass
+class RecordRetryException(DebugLevel):
+    exc: Exception
+    code: str = "M021"
+
+    def message(self) -> str:
+        return f"External call exception: {self.exc}"
 
 
 # since mypy doesn't run on every file we need to suggest to mypy that every
@@ -2413,6 +2506,14 @@ if 1 == 0:
     GitNothingToDo(sha="")
     GitProgressUpdatedCheckoutRange(start_sha="", end_sha="")
     GitProgressCheckedOutAt(end_sha="")
+    RegistryIndexProgressMakingGETRequest(url="")
+    RegistryIndexProgressGETResponse(url="", resp_code=1234)
+    RegistryProgressMakingGETRequest(url="")
+    RegistryProgressGETResponse(url="", resp_code=1234)
+    RegistryResponseUnexpectedType(response=""),
+    RegistryResponseMissingTopKeys(response=""),
+    RegistryResponseMissingNestedKeys(response=""),
+    RegistryResponseExtraNestedKeys(response=""),
     SystemErrorRetrievingModTime(path="")
     SystemCouldNotWrite(path="", reason="", exc=Exception(""))
     SystemExecutingCmd(cmd=[""])
@@ -2434,6 +2535,8 @@ if 1 == 0:
     ConnectionUsed(conn_type="", conn_name="")
     SQLQuery(conn_name="", sql="")
     SQLQueryStatus(status="", elapsed=0.1)
+    CodeExecution(conn_name="", code_content="")
+    CodeExecutionStatus(status="", elapsed=0.1)
     SQLCommit(conn_name="")
     ColTypeChange(
         orig_type="", new_type="", table=_ReferenceKey(database="", schema="", identifier="")
@@ -2542,7 +2645,7 @@ if 1 == 0:
     DatabaseErrorRunning(hook_type="")
     EmptyLine()
     HooksRunning(num_hooks=0, hook_type="")
-    HookFinished(stat_line="", execution="")
+    HookFinished(stat_line="", execution="", execution_time=0)
     WriteCatalogFailure(num_exceptions=0)
     CatalogWritten(path="")
     CannotGenerateDocs()
@@ -2737,3 +2840,4 @@ if 1 == 0:
     GeneralWarningMsg(msg="", log_fmt="")
     GeneralWarningException(exc=Exception(""), log_fmt="")
     EventBufferFull()
+    RecordRetryException(exc=Exception(""))
