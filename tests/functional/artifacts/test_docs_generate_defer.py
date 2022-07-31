@@ -30,4 +30,4 @@ class TestDocsGenerateDefer:
 
         # defer test, it succeeds
         results = run_dbt(["docs", "generate", "--state", "./state", "--defer"])
-        raise Exception("ok")
+        assert results.nodes["model.test.model"]
